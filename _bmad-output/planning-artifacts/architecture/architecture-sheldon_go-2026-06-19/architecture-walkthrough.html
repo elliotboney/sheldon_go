@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sheldon — Architecture Walkthrough (Go rewrite)</title>
+<style>
+  :root{
+    --ink:#1c1c1c;
+    --ink-2:#3a3a3a;
+    --ink-3:#5e5e5e;
+    --paper:#e9e7e1;
+    --paper-2:#dedbd2;
+    --paper-3:#f2f0ea;
+    --line:#b9b5aa;
+    --line-2:#cbc7bc;
+    --accent:#0f0f0f;
+    --keystone:#161616;
+    --keystone-ink:#f2f0ea;
+    --flag:#7a3b00;
+    --flag-bg:#efe2cf;
+    --mono:"SFMono-Regular",ui-monospace,"DejaVu Sans Mono","Liberation Mono",Menlo,Consolas,monospace;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --dither: repeating-conic-gradient(var(--line) 0% 25%, transparent 0% 50%);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--sans);
+    font-size:16px;
+    line-height:1.6;
+    /* faint e-paper dither grain */
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(0,0,0,0.035) 1px, transparent 0);
+    background-size:4px 4px;
+  }
+  a{color:inherit}
+  code,.mono{font-family:var(--mono)}
+
+  /* ---------- layout shell ---------- */
+  .shell{display:flex;max-width:1280px;margin:0 auto}
+  nav.toc{
+    position:sticky;top:0;align-self:flex-start;
+    width:230px;min-width:230px;height:100vh;overflow-y:auto;
+    padding:28px 18px 40px;
+    border-right:1px solid var(--line);
+    background:var(--paper-2);
+    font-family:var(--mono);
+    font-size:12.5px;
+  }
+  nav.toc .brand{
+    display:flex;align-items:center;gap:9px;margin-bottom:22px;
+  }
+  nav.toc .brand .face{
+    font-size:11px;line-height:1.05;white-space:pre;
+    border:1px solid var(--ink);padding:3px 5px;background:var(--paper-3);
+  }
+  nav.toc .brand b{font-size:14px;letter-spacing:1px}
+  nav.toc ol{list-style:none;margin:0;padding:0;counter-reset:s}
+  nav.toc li{margin:0 0 3px}
+  nav.toc a{
+    display:block;text-decoration:none;color:var(--ink-3);
+    padding:5px 7px;border:1px solid transparent;
+    counter-increment:s;
+  }
+  nav.toc a::before{content:counter(s,decimal-leading-zero) "  ";color:var(--line);}
+  nav.toc a:hover{color:var(--ink);border-color:var(--line-2);background:var(--paper-3)}
+  nav.toc a.active{color:var(--ink);border-color:var(--ink);background:var(--paper-3)}
+  nav.toc .nfoot{margin-top:24px;color:var(--ink-3);font-size:11px;line-height:1.5;border-top:1px dashed var(--line);padding-top:12px}
+
+  main{flex:1;min-width:0;padding:0 48px 120px}
+  section{padding-top:46px;scroll-margin-top:10px}
+  .sec-kicker{
+    font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--ink-3);margin:0 0 6px;
+  }
+  h1,h2,h3{font-family:var(--mono);font-weight:700;letter-spacing:-.3px;line-height:1.15}
+  h2{font-size:26px;margin:0 0 14px;border-bottom:2px solid var(--ink);padding-bottom:10px}
+  h3{font-size:16px;margin:0}
+  p{margin:0 0 14px;max-width:74ch}
+  .lead{font-size:17px;color:var(--ink-2);max-width:70ch}
+
+  /* ---------- hero ---------- */
+  header.hero{
+    padding:54px 48px 30px;border-bottom:1px solid var(--line);
+    position:relative;overflow:hidden;
+  }
+  header.hero .dither-band{
+    position:absolute;inset:0 0 auto 0;height:6px;
+    background:var(--dither);background-size:6px 6px;opacity:.5;
+  }
+  .hero-tag{font-family:var(--mono);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--ink-3);margin:8px 0 18px}
+  .hero h1{font-size:40px;margin:0 0 6px;letter-spacing:-1px}
+  .hero h1 .sub{display:block;font-size:15px;color:var(--ink-3);font-weight:400;letter-spacing:1px;margin-top:8px}
+  .paradigm{
+    font-family:var(--mono);font-size:18px;line-height:1.5;
+    border-left:4px solid var(--ink);padding:14px 0 14px 18px;margin:22px 0 24px;
+    max-width:80ch;color:var(--ink);
+  }
+  .hero-pet{
+    float:right;margin:-6px 0 14px 28px;
+    border:2px solid var(--ink);background:var(--paper-3);
+    padding:12px 16px;font-family:var(--mono);font-size:12px;line-height:1.25;
+    white-space:pre;text-align:center;box-shadow:5px 5px 0 var(--line);
+  }
+  .hero-pet .cap{display:block;margin-top:8px;font-size:10px;letter-spacing:2px;color:var(--ink-3)}
+
+  .tension{
+    display:grid;grid-template-columns:1fr auto 1fr;gap:0;align-items:stretch;
+    margin:8px 0 8px;border:1px solid var(--line);background:var(--paper-3);
+  }
+  .tension .col{padding:16px 18px}
+  .tension .col h4{font-family:var(--mono);font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin:0 0 8px;color:var(--ink-3)}
+  .tension .col.from{background:var(--paper-2)}
+  .tension .col p{font-size:14px;margin:0;color:var(--ink-2)}
+  .tension .arrow{
+    display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:22px;padding:0 14px;
+    border-left:1px dashed var(--line);border-right:1px dashed var(--line);
+    background:var(--paper-2);
+  }
+  .keep-note{
+    font-family:var(--mono);font-size:12.5px;color:var(--flag);
+    background:var(--flag-bg);border:1px solid var(--line);
+    padding:10px 14px;margin-top:14px;display:inline-block;
+  }
+
+  /* ---------- diagram ---------- */
+  .diagram-wrap{border:1px solid var(--line);background:var(--paper-3);padding:26px;margin:6px 0 14px;overflow-x:auto}
+  .bus-diagram{display:flex;flex-direction:column;align-items:center;min-width:620px}
+  .edge-row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:6px}
+  .node{
+    font-family:var(--mono);border:1.5px solid var(--ink);background:var(--paper);
+    padding:9px 12px;min-width:120px;text-align:center;font-size:12px;line-height:1.3;
+  }
+  .node b{display:block;font-size:13px;margin-bottom:3px}
+  .node small{color:var(--ink-3);font-size:10.5px}
+  .node.untrusted{border-style:dashed;background:var(--flag-bg)}
+  .node.untrusted b::after{content:" ⚠"}
+  .connector{font-family:var(--mono);color:var(--line);font-size:12px;margin:2px 0;letter-spacing:.5px}
+  .bus-bar{
+    width:100%;max-width:560px;text-align:center;font-family:var(--mono);
+    border:2px solid var(--ink);background:var(--ink);color:var(--keystone-ink);
+    padding:11px 14px;font-size:12.5px;margin:6px 0;
+  }
+  .bus-bar b{letter-spacing:1px}
+  .core-node{
+    width:100%;max-width:560px;text-align:center;font-family:var(--mono);
+    border:2px solid var(--ink);background:var(--paper-2);padding:13px 14px;
+  }
+  .core-node b{font-size:14px;letter-spacing:1px}
+  .core-node small{display:block;color:var(--ink-3);font-size:11px;margin-top:4px}
+  .side-edges{display:flex;justify-content:space-between;width:100%;max-width:680px;margin:14px 0;gap:18px;flex-wrap:wrap}
+  .side-edges .leaf{
+    flex:1;min-width:200px;font-family:var(--mono);font-size:11.5px;border:1px dashed var(--line);
+    padding:10px 12px;background:var(--paper);color:var(--ink-2);
+  }
+  .side-edges .leaf b{color:var(--ink);display:block;margin-bottom:3px;font-size:12px}
+  .diagram-legend{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);margin-top:10px;display:flex;gap:22px;flex-wrap:wrap}
+  .diagram-legend span{display:inline-flex;align-items:center;gap:7px}
+  .sw{width:22px;height:12px;border:1.5px solid var(--ink);display:inline-block}
+  .sw.dash{border-style:dashed;background:var(--flag-bg)}
+  .sw.solid{background:var(--paper)}
+  .sw.fill{background:var(--ink)}
+
+  /* ---------- keystone cards ---------- */
+  .grid-keystone{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:6px}
+  details.ad{
+    border:1px solid var(--line);background:var(--paper-3);
+  }
+  details.ad>summary{
+    list-style:none;cursor:pointer;padding:14px 16px;display:flex;align-items:flex-start;gap:12px;
+  }
+  details.ad>summary::-webkit-details-marker{display:none}
+  details.ad>summary .tw{
+    font-family:var(--mono);font-size:18px;line-height:1;margin-left:auto;color:var(--ink-3);transition:transform .15s;
+  }
+  details.ad[open]>summary .tw{transform:rotate(45deg)}
+  .ad-id{
+    font-family:var(--mono);font-weight:700;font-size:12px;
+    border:1.5px solid var(--ink);padding:3px 7px;background:var(--paper);white-space:nowrap;
+  }
+  .ad-title{font-family:var(--mono);font-weight:700;font-size:14px;line-height:1.3}
+  .ad-body{padding:0 16px 16px;border-top:1px dashed var(--line);margin-top:0}
+  .ad-body p{font-size:13.5px;margin:12px 0 0}
+  .why{
+    font-family:var(--mono);font-size:12px;background:var(--paper-2);
+    border-left:3px solid var(--ink);padding:9px 12px;margin-top:13px;color:var(--ink-2);
+  }
+  .why b{color:var(--ink)}
+  .bpr{margin-top:12px;display:grid;gap:7px}
+  .bpr .row{display:grid;grid-template-columns:78px 1fr;gap:10px;font-size:12.5px}
+  .bpr .row .k{font-family:var(--mono);font-size:10.5px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-3);padding-top:2px}
+  .bpr .row.binds .k{color:var(--ink)}
+  .bpr .row.prevents .v{color:var(--ink-2)}
+
+  /* keystone variant */
+  details.keystone{border:2px solid var(--ink);background:var(--keystone);color:var(--keystone-ink)}
+  details.keystone>summary{padding:16px 18px}
+  details.keystone .ad-id{background:var(--keystone-ink);color:var(--ink);border-color:var(--keystone-ink)}
+  details.keystone .ad-title{color:var(--keystone-ink)}
+  details.keystone>summary .tw{color:var(--paper-2)}
+  details.keystone .ad-body{border-top-color:#555}
+  details.keystone .why{background:#262626;border-left-color:var(--keystone-ink);color:#d8d6cf}
+  details.keystone .why b{color:#fff}
+  details.keystone .bpr .row .k{color:#9a988f}
+  details.keystone .bpr .row.binds .k{color:#fff}
+  details.keystone .bpr .row .v{color:#d8d6cf}
+  details.keystone .badge-key{
+    display:inline-block;font-family:var(--mono);font-size:9.5px;letter-spacing:2px;
+    border:1px solid var(--keystone-ink);padding:2px 6px;margin-top:6px;color:var(--keystone-ink);
+  }
+
+  /* ---------- inherited gallery ---------- */
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:13px}
+  .chip{
+    border:1px solid var(--line);background:var(--paper-3);padding:13px 14px;
+  }
+  .chip .head{display:flex;align-items:baseline;gap:9px;margin-bottom:7px}
+  .chip .cid{font-family:var(--mono);font-weight:700;font-size:11px;border:1px solid var(--ink);padding:2px 6px;background:var(--paper)}
+  .chip .ctitle{font-family:var(--mono);font-weight:700;font-size:12.5px;line-height:1.25}
+  .chip p{font-size:12.5px;margin:0;color:var(--ink-2);max-width:none}
+  .chip .from{font-family:var(--mono);font-size:10px;color:var(--ink-3);margin-top:8px;letter-spacing:.5px}
+
+  /* ---------- reviewer-gate cards ---------- */
+  .gate-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .gate-card{border:2px dashed var(--flag);background:var(--flag-bg);padding:16px 18px}
+  .gate-card .gtag{font-family:var(--mono);font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--flag);margin-bottom:7px;display:flex;align-items:center;gap:7px}
+  .gate-card .gtag::before{content:"⚑"}
+  .gate-card .head{display:flex;align-items:baseline;gap:9px;margin-bottom:8px}
+  .gate-card .cid{font-family:var(--mono);font-weight:700;font-size:12px;border:1.5px solid var(--ink);padding:2px 7px;background:var(--paper)}
+  .gate-card .ctitle{font-family:var(--mono);font-weight:700;font-size:13.5px}
+  .gate-card p{font-size:13px;margin:0 0 9px;color:var(--ink-2)}
+  .gate-card .caught{font-family:var(--mono);font-size:11.5px;color:var(--ink);border-top:1px solid var(--line);padding-top:9px}
+  .gate-card .caught b{color:var(--flag)}
+
+  /* ---------- tables ---------- */
+  .tbl-wrap{border:1px solid var(--line);overflow-x:auto}
+  table{border-collapse:collapse;width:100%;font-size:13px;background:var(--paper-3)}
+  th,td{text-align:left;padding:10px 13px;border-bottom:1px solid var(--line-2);vertical-align:top}
+  thead th{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;background:var(--paper-2);color:var(--ink-2);border-bottom:1.5px solid var(--ink)}
+  tbody tr:last-child td{border-bottom:none}
+  td.cap{font-family:var(--mono);font-weight:700;white-space:nowrap}
+  td.gov code{font-size:11px;background:var(--paper-2);border:1px solid var(--line-2);padding:1px 5px;margin:0 2px 2px 0;display:inline-block}
+
+  /* ---------- milestone arc ---------- */
+  .arc{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--line);margin:6px 0 16px;background:var(--paper-3)}
+  .arc .ms{padding:16px;border-right:1px solid var(--line);position:relative}
+  .arc .ms:last-child{border-right:none}
+  .arc .ms .mlabel{font-family:var(--mono);font-weight:700;font-size:15px;margin-bottom:4px}
+  .arc .ms .mname{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-3);margin-bottom:9px}
+  .arc .ms p{font-size:12.5px;margin:0;color:var(--ink-2)}
+  .arc .ms.swap{background:var(--ink);color:var(--keystone-ink)}
+  .arc .ms.swap .mname{color:#9a988f}
+  .arc .ms.swap p{color:#d8d6cf}
+  .arc .ms .seam-mark{position:absolute;top:14px;right:14px;font-family:var(--mono);font-size:10px;border:1px solid currentColor;padding:1px 5px;opacity:.7}
+  .seam-callout{
+    font-family:var(--mono);font-size:13px;border:1px solid var(--ink);
+    background:var(--paper-2);padding:13px 16px;margin-top:2px;
+  }
+  .seam-callout b{background:var(--ink);color:var(--keystone-ink);padding:1px 5px}
+
+  /* ---------- deferred ---------- */
+  .deferred-grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+  .def{font-family:var(--mono);font-size:12.5px;border:1px solid var(--line);background:var(--paper-3);padding:11px 14px;display:flex;gap:10px;align-items:flex-start}
+  .def .dot{color:var(--ink-3);flex:0 0 auto}
+  .def b{color:var(--ink)}
+  .def span{color:var(--ink-2)}
+
+  /* ---------- footer ---------- */
+  footer{padding:40px 48px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11.5px;color:var(--ink-3);line-height:1.7}
+  footer .pet{white-space:pre;font-size:11px;color:var(--ink-2);margin-bottom:14px}
+
+  /* stack table compact */
+  .stack-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;font-family:var(--mono);font-size:11.5px}
+  .stack-grid .si{border:1px solid var(--line-2);background:var(--paper-3);padding:8px 11px}
+  .stack-grid .si b{display:block;color:var(--ink)}
+  .stack-grid .si span{color:var(--ink-3)}
+
+  @media (max-width:920px){
+    nav.toc{display:none}
+    main{padding:0 22px 80px}
+    header.hero{padding:38px 22px 26px}
+    .grid-keystone,.gate-grid,.deferred-grid{grid-template-columns:1fr}
+    .arc{grid-template-columns:1fr;}
+    .arc .ms{border-right:none;border-bottom:1px solid var(--line)}
+    .tension{grid-template-columns:1fr}
+    .tension .arrow{border:none;border-top:1px dashed var(--line);border-bottom:1px dashed var(--line);padding:8px}
+    .hero-pet{float:none;margin:0 0 18px}
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="dither-band"></div>
+  <div class="hero-pet">  ┌─────────┐
+  │ ●   ●  │
+  │    ◡    │
+  └─────────┘
+   sheldon<span class="cap">E-INK · PI ZERO 2W · 512MB</span></div>
+  <div class="hero-tag">Architecture Spine · Go Rewrite · status: final · 2026-06-19</div>
+  <h1>sheldon
+    <span class="sub">A chat-first E-Ink AI pet, ported from a Python v2 design into one Go process.</span>
+  </h1>
+
+  <div class="paradigm">
+    A single supervised Go process — a hexagonal LLM-free core with goroutine actors over an
+    in-process typed channel bus, and the untrusted brain behind a swappable isolation seam.
+  </div>
+
+  <p class="lead">This is the one sentence the whole build hangs from. Everything below is the tension it resolves
+  and the 17 decisions (AD-1..AD-17) that keep it honest.</p>
+
+  <div class="tension">
+    <div class="col from">
+      <h4>The Python v2 body</h4>
+      <p>A fork-server, a UDS bus, and separate broker / transport / display / plugin-host
+      <i>processes</i>. Real isolation, real overhead — heavy on a 512MB Pi.</p>
+    </div>
+    <div class="arrow">⇒</div>
+    <div class="col to">
+      <h4>The Go body</h4>
+      <p>That multi-process machinery <i>collapses into one supervised process.</i> Subsystems become
+      goroutine actors under a <code>suture</code> tree; the bus becomes a core-owned channel hub.</p>
+    </div>
+  </div>
+
+  <div class="keep-note">The catch: collapsing to one process must NOT dissolve the one security boundary.
+  The untrusted brain stays behind a wall — just a <i>swappable</i> one (goroutine now, process wall at M3).</div>
+</header>
+
+<div class="shell">
+  <nav class="toc">
+    <div class="brand">
+      <div class="face">[o_o]</div>
+      <b>SHELDON</b>
+    </div>
+    <ol>
+      <li><a href="#paradigm">The paradigm</a></li>
+      <li><a href="#glance">System at a glance</a></li>
+      <li><a href="#keystone">5 keystone Go calls</a></li>
+      <li><a href="#inherited">The inherited soul</a></li>
+      <li><a href="#gate">The reviewer gate</a></li>
+      <li><a href="#capmap">Capability map</a></li>
+      <li><a href="#milestones">Milestone arc</a></li>
+      <li><a href="#deferred">What's deferred</a></li>
+      <li><a href="#stack">Stack</a></li>
+    </ol>
+    <div class="nfoot">
+      17 architecture decisions.<br>
+      5 keystone (Go-native).<br>
+      10 inherited from Python v2.<br>
+      2 restored by the review gate.
+    </div>
+  </nav>
+
+  <main>
+
+    <!-- 1. PARADIGM -->
+    <section id="paradigm">
+      <p class="sec-kicker">01 · The paradigm in plain language</p>
+      <h2>One body, one soul, one wall</h2>
+      <p class="lead">Three ideas hold the design together. Keep them in your head and the rest of this document reads cleanly.</p>
+      <div class="grid-keystone" style="grid-template-columns:1fr 1fr 1fr">
+        <div class="chip">
+          <div class="head"><span class="ctitle">① The soul survives</span></div>
+          <p>The Python hexagon's <i>logical</i> shape ports over and gets cleaner. <code>core</code> is the
+          LLM-free domain center: personality-state, memory, the arbiter, resident reflexes, the scheduler.
+          It hosts the bus and is the supervisor root.</p>
+        </div>
+        <div class="chip">
+          <div class="head"><span class="ctitle">② Edges are goroutines</span></div>
+          <p>Broker, worker, chat-transport, display, plugin-host — every non-core part is an edge adapter
+          and a goroutine actor. They reach core <i>only</i> through the bus, never through its internals.</p>
+        </div>
+        <div class="chip">
+          <div class="head"><span class="ctitle">③ The brain is fenced</span></div>
+          <p>The worker is the one untrusted-by-design component (it assembles prompts from web-influenced
+          content). It lives behind an isolation seam — a goroutine today, a uid-separated subprocess at M3.</p>
+        </div>
+      </div>
+      <p style="margin-top:20px"><b>Namespace map:</b> <code>core/</code> = domain (LLM-free, depguard + <code>internal/</code> enforced)
+      · <code>broker/ worker/ transport/ display/ plugins/</code> = adapters · <code>contracts/</code> = the shared
+      <code>Envelope/Job/Result</code> types.</p>
+    </section>
+
+    <!-- 2. AT A GLANCE -->
+    <section id="glance">
+      <p class="sec-kicker">02 · The structure</p>
+      <h2>The system at a glance</h2>
+      <p class="lead">Core is the hub. Edges hang off the bus and never touch core's internals. The worker is the
+      only node that talks <i>outward</i> — and it does so through the broker, the sole credential holder.</p>
+
+      <div class="diagram-wrap">
+        <div class="bus-diagram">
+          <div class="edge-row">
+            <div class="node"><b>chat-transport</b><small>conversation surface</small></div>
+            <div class="node"><b>display</b><small>region compositor</small></div>
+            <div class="node"><b>plugin-host</b><small>hw + behavioral plugins</small></div>
+          </div>
+          <div class="connector">│ &nbsp; &nbsp; │ &nbsp; &nbsp; │</div>
+          <div class="bus-bar"><b>ENVELOPE CHANNEL HUB</b><br><small>core-owned · in-process Go structs · no serialization &nbsp;|&nbsp; becomes UDS+gob at the worker wall @ M3</small></div>
+          <div class="connector">│ &nbsp; &nbsp; │</div>
+          <div class="core-node"><b>core &nbsp;— LLM-free domain</b>
+            <small>personality-state · memory · arbiter · resident reflexes · scheduler · suture supervisor root</small>
+          </div>
+
+          <div class="side-edges">
+            <div class="leaf"><b>worker &nbsp;⚠ untrusted</b>
+              core → worker: scheduled / reply-turn jobs. worker → broker: <i>authenticated</i> model/tool call.
+              worker reads history read-only + non-vault markdown. Lives behind the AD-2 isolation seam.</div>
+            <div class="leaf"><b>broker &nbsp;— trust boundary</b>
+              Sole credential holder + sole egress to models/tools. The only path off the device. No creds ever ride the bus.</div>
+            <div class="leaf"><b>memory &nbsp;— core-owned</b>
+              Markdown tree (atomic writes) + sqlite (history via FTS5 + learnings). Core is the single writer.</div>
+          </div>
+        </div>
+        <div class="diagram-legend">
+          <span><i class="sw solid"></i> edge adapter (goroutine)</span>
+          <span><i class="sw dash"></i> untrusted / behind a wall</span>
+          <span><i class="sw fill"></i> core-owned bus + domain</span>
+        </div>
+      </div>
+      <p>Read it as: <b>edges depend on the bus, never on core internals</b>. The only authenticated outward call in the
+      whole system is <code>worker → broker</code>. That single arrow is the security model.</p>
+    </section>
+
+    <!-- 3. KEYSTONE -->
+    <section id="keystone">
+      <p class="sec-kicker">03 · The load-bearing Go decisions</p>
+      <h2>The 5 keystone calls</h2>
+      <p class="lead">These five are <i>Go-native</i> — the decisions that turned the multi-process Python design into one
+      supervised process while preserving the security boundary. Click any card to expand the rule. They're rendered dark
+      to set them apart from the inherited soul below.</p>
+
+      <div class="grid-keystone">
+
+        <details class="ad keystone" open>
+          <summary>
+            <span class="ad-id">AD-1</span>
+            <span class="ad-title">Single supervised Go process; the LLM-free core is the supervisor root</span>
+            <span class="tw">+</span>
+          </summary>
+          <div class="ad-body">
+            <span class="badge-key">KEYSTONE · adapts Python AD-1</span>
+            <div class="why"><b>Why:</b> prevents a builder assuming process-peer actors that don't exist at M0 — and
+            keeps the brain's concerns from leaking into the soul. Python's multi-process model collapses into one.</div>
+            <div class="bpr">
+              <div class="row binds"><span class="k">Binds</span><span class="v">All subsystems · <code>core/</code></span></div>
+              <div class="row prevents"><span class="k">Prevents</span><span class="v">Assuming the isolation seam is already a process wall; LLM/provider code creeping into core.</span></div>
+              <div class="row"><span class="k">Rule</span><span class="v">One process. Edges are goroutine actors; <b>core</b> (bus hub, arbiter, reflexes, state, memory, scheduler) is the <b>supervisor root</b> and imports no LLM/provider modules — enforced by <code>depguard</code> (CI fails the build) and by putting provider SDKs behind <code>broker/internal/</code>. No code may assume the seam is a wall.</span></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="ad keystone" open>
+          <summary>
+            <span class="ad-id">AD-2</span>
+            <span class="ad-title">Worker isolation seam: the brain behind a swappable interface</span>
+            <span class="tw">+</span>
+          </summary>
+          <div class="ad-body">
+            <span class="badge-key">KEYSTONE · from brainstorming · collapses Python AD-3 fork-server</span>
+            <div class="why"><b>Why:</b> the isolation strategy must not bleed into every caller, and the M3 hardening
+            must not reshape the system. One interface, swappable bodies.</div>
+            <div class="bpr">
+              <div class="row binds"><span class="k">Binds</span><span class="v">All · <code>worker/</code>, <code>contracts/</code> · CAP-1</span></div>
+              <div class="row prevents"><span class="k">Prevents</span><span class="v">Isolation strategy leaking into callers; M3 hardening reshaping the whole system.</span></div>
+              <div class="row"><span class="k">Rule</span><span class="v">The worker is a Go interface — <code>Worker.AssembleAndPropose(ctx, turn) (Result, error)</code>. <b>Monolith+</b> (goroutine, context timeout + own <code>recover()</code>) for M0–M2; <b>Privsep-lite</b> (long-lived uid-separated recycled subprocess, re-exec of <code>/proc/self/exe</code>) as the M3+ end-state. WASM/wazero is a deferred third body behind the same seam. ≤1 worker turn in flight regardless of body.</span></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="ad keystone" open>
+          <summary>
+            <span class="ad-id">AD-3</span>
+            <span class="ad-title">The vault never exists until the worker is across a process wall</span>
+            <span class="tw">+</span>
+          </summary>
+          <div class="ad-body">
+            <span class="badge-key">KEYSTONE · adapts Python AD-6</span>
+            <div class="why"><b>Why:</b> a testable invariant, not a managed risk. A goroutine-worker in Monolith+ can
+            never read a populated vault — the interim exposure window never opens, because there's nothing to read.</div>
+            <div class="bpr">
+              <div class="row binds"><span class="k">Binds</span><span class="v">worker, broker, memory, milestones · CAP-6</span></div>
+              <div class="row prevents"><span class="k">Prevents</span><span class="v">The interim exposure window from ever opening.</span></div>
+              <div class="row"><span class="k">Rule</span><span class="v">No real secret reachable by prompt-assembly (the <code>vault/</code> promotion target) <b>EXISTS</b> until the worker is across a process/uid wall. Vault population is gated on uid separation. At M3+, <code>vault/</code> permissions exclude the worker uid (OS-enforced, not a path filter), and surfacing vault contents into a prompt is a broker-gated decision.</span></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="ad keystone" open>
+          <summary>
+            <span class="ad-id">AD-4</span>
+            <span class="ad-title">Uniform Envelope contract; transport is swappable seed</span>
+            <span class="tw">+</span>
+          </summary>
+          <div class="ad-body">
+            <span class="badge-key">KEYSTONE · adapts Python AD-4 + AD-11</span>
+            <div class="why"><b>Why:</b> the M3 isolation swap must stay a <i>pure transport change</i> that reshapes no
+            caller — and ad-hoc point-to-point channels the edges can't track must never appear.</div>
+            <div class="bpr">
+              <div class="row binds"><span class="k">Binds</span><span class="v">All inter-component comms · <code>contracts/</code></span></div>
+              <div class="row prevents"><span class="k">Prevents</span><span class="v">The M3 swap rippling into callers; free-form event bodies.</span></div>
+              <div class="row"><span class="k">Rule</span><span class="v"><code>Envelope/Job/Result</code> are uniform Go structs over a core-owned in-process channel hub — <b>NO in-process serialization</b>. The <b>contracts</b> are invariant (proposal protocol, <code>turn_id</code> idempotent close, monotonic display <code>seq</code>, closed plugin event-kind set). The <b>transport</b> is swappable: channel now → UDS + <code>gob</code> at the worker wall @ M3. Closed header <code>id/v/kind/src/dst/turn_id</code>; each event kind is co-versioned with a payload struct in <code>contracts/</code> — kind AND body are closed.</span></div>
+            </div>
+          </div>
+        </details>
+
+        <details class="ad keystone" open style="grid-column:1 / -1">
+          <summary>
+            <span class="ad-id">AD-5</span>
+            <span class="ad-title">Crash-isolation: suture supervises every edge; the soul survives any single edge failure</span>
+            <span class="tw">+</span>
+          </summary>
+          <div class="ad-body">
+            <span class="badge-key">KEYSTONE · new Go decision · carries Python AD-8/AD-13 degradation semantics</span>
+            <div class="why"><b>Why:</b> Go's <code>recover()</code> does NOT cross goroutines — so one unrecovered edge
+            panic could otherwise kill the whole pet. Supervision makes a dead edge degrade gracefully instead.</div>
+            <div class="bpr">
+              <div class="row binds"><span class="k">Binds</span><span class="v">All subsystems</span></div>
+              <div class="row prevents"><span class="k">Prevents</span><span class="v">An unrecovered edge goroutine panic taking down the soul.</span></div>
+              <div class="row"><span class="k">Rule</span><span class="v"><code>suture/v4</code> supervises every edge (broker, transport, display, plugin-host, worker invocation) as a <code>Service</code> with its own <code>defer recover()</code> + backoff restart; <b>core</b> is the supervisor root. <b>Invariant: the soul survives ANY single edge failure</b> — transport down → reflex-only; provider chain exhausted → reflex fallback; plugin crash → kills its widget, not the soul. <code>systemd Restart=always</code> (+ <code>OOMPolicy=stop</code>) is the outer net; only core death restarts the process.</span></div>
+            </div>
+          </div>
+        </details>
+
+      </div>
+    </section>
+
+    <!-- 4. INHERITED -->
+    <section id="inherited">
+      <p class="sec-kicker">04 · Adapted from Python v2</p>
+      <h2>The inherited soul (AD-6 → AD-15)</h2>
+      <p class="lead">These ten are the logical invariants that survived the port. The physical layer changed; the soul didn't.
+      Terser here by design — each one ports a settled Python decision into Go idiom.</p>
+
+      <div class="gallery">
+
+        <div class="chip">
+          <div class="head"><span class="cid">AD-6</span><span class="ctitle">Core is the sole writer of state & memory</span></div>
+          <p>Only core mutates personality-state, the markdown tree, and sqlite. The worker only <i>proposes</i> changes in a
+          <code>Result</code>; core validates and applies. Display renders core's snapshots latest-wins; region ids are one closed enum.</p>
+          <div class="from">↳ adapts Python AD-5 · binds CAP-2, CAP-6</div>
+        </div>
+
+        <div class="chip">
+          <div class="head"><span class="cid">AD-7</span><span class="ctitle">Hybrid memory: sqlite + atomic markdown</span></div>
+          <p>Two layers, no vectors. History + learnings → <code>modernc.org/sqlite</code> (pure-Go, FTS5, WAL). Curated knowledge →
+          markdown tree, atomic writes via <code>renameio/v2</code> + parent-dir fsync. <code>DIRECTIVE.md</code> is human-owned.</p>
+          <div class="from">↳ adapts Python AD-6 · binds CAP-6</div>
+        </div>
+
+        <div class="chip">
+          <div class="head"><span class="cid">AD-8</span><span class="ctitle">The arbiter governs the brain</span></div>
+          <p>≤1 worker turn in flight. Events coalesce into one pending slot <i>per turn-job class</i> (reply / proactive / dream).
+          Proactive turns cooldown-gated; budget + PiSugar2 battery-aware. Provider exhaustion → reflex fallback (never freezes).</p>
+          <div class="from">↳ adapts Python AD-9 · binds CAP-1/2/4/8</div>
+        </div>
+
+        <div class="chip">
+          <div class="head"><span class="cid">AD-9</span><span class="ctitle">Broker is the sole trust boundary</span></div>
+          <p>Only holder of model + tool creds and only egress. Owns the ordered provider chain (GLM default; Ollama-LAN / OpenAI /
+          OpenRouter / Anthropic) via <code>failsafe-go</code>. <code>depguard</code> fences provider SDKs to <code>broker/internal/</code>. No creds on the bus.</p>
+          <div class="from">↳ adapts Python AD-2 · binds CAP-5, CAP-8</div>
+        </div>
+
+        <div class="chip">
+          <div class="head"><span class="cid">AD-10</span><span class="ctitle">Versioned typed contracts + tests from M0</span></div>
+          <p>Go structs <i>are</i> the typed contract; versioned with a <code>v</code> header. Required M0 tests: gob round-trip of every
+          Envelope, ≤1-worker bound, atomic-write crash-safety, "soul survives a single edge panic." M0 is a real walking skeleton on the Pi.</p>
+          <div class="from">↳ adapts Python AD-10 · binds contracts/, tests/</div>
+        </div>
+
+        <div class="chip">
+          <div class="head"><span class="cid">AD-11</span><span class="ctitle">Turn identity & idempotent close</span></div>
+          <p>Every turn carries a <code>turn_id</code> in the closed header; core fences on it. A <code>Result</code> whose turn_id is already
+          closed (timed out, superseded, fallback-resolved) is discarded. Close is idempotent, implemented via context cancellation.</p>
+          <div class="from">↳ adapts Python AD-12 · binds core/, worker/</div>
+        </div>
+
+        <div class="chip">
+          <div class="head"><span class="cid">AD-12</span><span class="ctitle">Chat transport is a pluggable first-class adapter</span></div>
+          <p>A bus client peer to broker/display, speaking a transport-agnostic message contract (never leak <code>telego.Update</code> into core).
+          One adapter ships now (Telegram / CLI); more add without core change. Holds its own connection cred. Core owns conversation-identity schema.</p>
+          <div class="from">↳ adapts Python AD-13 · binds CAP-1, transport/</div>
+        </div>
+
+        <div class="chip">
+          <div class="head"><span class="cid">AD-13</span><span class="ctitle">Scheduler: the autonomous mind</span></div>
+          <p>Core-resident scheduler owns self-driven life as named jobs, each with its own cadence (interval / cron / idle-triggered) — heartbeat
+          is just one job. Tagged by cost tier: reflex jobs in-core/no-LLM; turn jobs cost a worker call. Battery-aware. Turn jobs go through the arbiter.</p>
+          <div class="from">↳ adapts Python AD-14 · binds CAP-10</div>
+        </div>
+
+        <div class="chip">
+          <div class="head"><span class="cid">AD-14</span><span class="ctitle">One compile-time bus-only plugin registry</span></div>
+          <p>One contract for hardware AND behavioral plugins. Go packages registered at compile time in <code>main</code> — "add a plugin" =
+          recompile. Manifest is a Go struct declaring all claims; conflicts rejected at <i>startup</i>. Single static binary, zero process sprawl.</p>
+          <div class="from">↳ re-decides Python AD-8 (dynamic load → registry) · binds CAP-3, CAP-7</div>
+        </div>
+
+        <div class="chip">
+          <div class="head"><span class="cid">AD-15</span><span class="ctitle">Dreaming & learning consolidation</span></div>
+          <p>Dreaming is a scheduled introspective <i>worker turn</i> — not a separate subsystem. It reuses worker/broker/arbiter. One dream turn
+          consolidates history, classifies + promotes durable learnings into curated markdown (sensitive → vault), and prunes the rest. Light scope.</p>
+          <div class="from">↳ adapts Python AD-15 · binds CAP-6, CAP-11</div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 5. REVIEWER GATE -->
+    <section id="gate">
+      <p class="sec-kicker">05 · The review gate caught these</p>
+      <h2>Two decisions the gate restored</h2>
+      <p class="lead">A reviewer gate ran three parallel reviewers (adversarial-seams, tech-currency, rubric) and surfaced
+      12 findings. Two were missing <i>decisions</i> — one silently dropped from Python, one never written. Both became ADs.</p>
+
+      <div class="gate-grid">
+        <div class="gate-card">
+          <div class="gtag">Gate CRITICAL · Python AD-7 was silently dropped</div>
+          <div class="head"><span class="cid">AD-16</span><span class="ctitle">Volatile state in RAM, checkpointed</span></div>
+          <p>The personality-state struct and the working window (recent-turn window + running summary) live in RAM,
+          checkpointed periodically to one small file. RAM state is <i>never</i> the source of truth for the durable layers.</p>
+          <div class="caught"><b>Caught:</b> high-frequency reflex churn (mood-drift, blink — many times a minute) would
+          otherwise wear the SD card. The Python volatile-state-checkpoint decision had vanished in the port.</div>
+        </div>
+
+        <div class="gate-card">
+          <div class="gtag">Gate HIGH · operational envelope was entirely silent</div>
+          <div class="head"><span class="cid">AD-17</span><span class="ctitle">Observability & operational logging</span></div>
+          <p>Structured logging via stdlib <code>log/slog</code> → stdout/stderr → journald (<code>Type=simple</code>). slog attributes become
+          queryable journal fields. journald <code>Storage=persistent</code> with <code>SystemMaxUse</code> caps to bound SD write wear.</p>
+          <div class="caught"><b>Caught:</b> an unattended, battery-yanked device failing silently with no diagnosable trail.
+          Subsystem panics, edge restarts, turn lifecycle, and provider fallbacks are now logged events.</div>
+        </div>
+      </div>
+
+      <p style="margin-top:18px;font-family:var(--mono);font-size:12.5px;color:var(--ink-3)">The other 10 findings tightened
+      existing ADs rather than adding new ones — e.g. learnings <code>pattern_key</code> dedup serialized through core (AD-7),
+      the display region-id type fork closed to one enum (AD-6), the arbiter's per-class catch-up slot (AD-8), and the
+      <code>renameio</code> durability claim corrected with an explicit parent-dir fsync (AD-7).</p>
+    </section>
+
+    <!-- 6. CAP MAP -->
+    <section id="capmap">
+      <p class="sec-kicker">06 · Capability → architecture</p>
+      <h2>The capability map</h2>
+      <p class="lead">Eleven capabilities (CAP-1..CAP-11), where each lives, and which ADs govern it. This is the traceability
+      contract: every capability points back to the decisions that keep it coherent.</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Capability</th><th>Lives in</th><th>Governed by</th></tr></thead>
+          <tbody>
+            <tr><td class="cap">CAP-1</td><td>LLM response to interaction — chat-transport ↔ core; arbiter → worker (seam) → broker</td><td class="gov"><code>AD-12</code><code>AD-2</code><code>AD-9</code><code>AD-8</code><code>AD-4</code><code>AD-11</code></td></tr>
+            <tr><td class="cap">CAP-2</td><td>Aliveness / resident reflexes — core reflexes + personality-state</td><td class="gov"><code>AD-1</code><code>AD-6</code><code>AD-8</code></td></tr>
+            <tr><td class="cap">CAP-3</td><td>Physical sensing (optional plugins) — plugin-host plugins (button, BLE)</td><td class="gov"><code>AD-14</code></td></tr>
+            <tr><td class="cap">CAP-4</td><td>Proactive action — arbiter (cooldown + credit/battery-gated); scheduler proposes</td><td class="gov"><code>AD-8</code><code>AD-13</code></td></tr>
+            <tr><td class="cap">CAP-5</td><td>Single capability broker — broker (in-process; worker reaches across the wall @ M3)</td><td class="gov"><code>AD-9</code><code>AD-4</code></td></tr>
+            <tr><td class="cap">CAP-6</td><td>Cross-turn memory — core-owned hybrid: sqlite (history + learnings) + markdown tree</td><td class="gov"><code>AD-6</code><code>AD-7</code><code>AD-15</code><code>AD-3</code></td></tr>
+            <tr><td class="cap">CAP-7</td><td>Pluggable plugins (hardware + behavioral) — plugin-host + one compile-time bus-only contract</td><td class="gov"><code>AD-14</code><code>AD-6</code></td></tr>
+            <tr><td class="cap">CAP-8</td><td>LLM fallback on error — broker provider chain (<code>failsafe-go</code>) + arbiter degradation</td><td class="gov"><code>AD-9</code><code>AD-8</code></td></tr>
+            <tr><td class="cap">CAP-9</td><td>Display compositor (face + widget regions) — core owns face, plugins claim widgets</td><td class="gov"><code>AD-6</code><code>AD-14</code></td></tr>
+            <tr><td class="cap">CAP-10</td><td>Autonomous mind / scheduling — core scheduler, named multi-cadence jobs, cost-tiered</td><td class="gov"><code>AD-13</code><code>AD-8</code></td></tr>
+            <tr><td class="cap">CAP-11</td><td>Self-improving learning + dreaming — hot-path <code>capture_learning</code> → sqlite; dream turn classifies/promotes/prunes</td><td class="gov"><code>AD-15</code><code>AD-7</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 7. MILESTONES -->
+    <section id="milestones">
+      <p class="sec-kicker">07 · The milestone arc</p>
+      <h2>Walking skeleton → Privsep-lite</h2>
+      <p class="lead">The whole point of the AD-2 seam: M3 hardening is a <i>transport swap</i>, not a redesign. The worker
+      interface never changes — only the body behind it and the bytes under it.</p>
+
+      <div class="arc">
+        <div class="ms">
+          <div class="mlabel">M0</div>
+          <div class="mname">Walking skeleton</div>
+          <p>Real end-to-end through the real hub, building <code>CGO_ENABLED=0</code> and passing <i>on the Pi</i>. Worker is a goroutine (Monolith+). M0 tests: gob round-trip, ≤1-worker, atomic-write crash-safety, soul-survives-panic.</p>
+        </div>
+        <div class="ms">
+          <div class="mlabel">M1–M2</div>
+          <div class="mname">Flesh out</div>
+          <p>Memory, scheduler, plugins, display compositor, proactive turns, dreaming. Worker stays a goroutine. The vault still does not exist — there's nothing for a goroutine-worker to read (AD-3).</p>
+        </div>
+        <div class="ms swap">
+          <div class="seam-mark">SEAM</div>
+          <div class="mlabel">M3</div>
+          <div class="mname">Privsep-lite swap</div>
+          <p>Worker becomes a uid-separated recycled subprocess (re-exec of <code>/proc/self/exe</code>). Transport under the seam swaps channel → UDS+gob. Vault gets populated, OS-unreadable to the worker uid. Callers unchanged.</p>
+        </div>
+        <div class="ms">
+          <div class="mlabel">M4+</div>
+          <div class="mname">Deferred</div>
+          <p>gokrazy deployment (read-only root, A/B OTA), WASM/wazero worker as a third body behind the same seam, additional transport adapters — all architected, none on the critical path.</p>
+        </div>
+      </div>
+
+      <div class="seam-callout">
+        Because the worker is a Go interface (AD-2) and the bus contract is invariant (AD-4),
+        <b>M3 reshapes no caller.</b> The hardening is: new worker body + UDS+gob transport + vault population.
+        Same <code>AssembleAndPropose</code> signature, same <code>Envelope/Job/Result</code> structs. A swap, not a rewrite.
+      </div>
+    </section>
+
+    <!-- 8. DEFERRED -->
+    <section id="deferred">
+      <p class="sec-kicker">08 · Intentionally open</p>
+      <h2>What's deferred</h2>
+      <p class="lead">So the reader knows what's a real gap vs. a deliberate hold. Nothing here is forgotten — each is parked
+      against a specific later trigger.</p>
+      <div class="deferred-grid">
+        <div class="def"><span class="dot">▹</span><span><b>Privsep-lite activation (M3+).</b> Worker stays a goroutine through M0–M2; subprocess + UDS+gob + vault turn on at M3 behind the unchanged seam.</span></div>
+        <div class="def"><span class="dot">▹</span><span><b>Threat-model confirmation before M3.</b> The "worker is untrusted" basis of AD-3 is settled in principle; explicit confirmation + a vault-isolation property test is the M3 gate.</span></div>
+        <div class="def"><span class="dot">▹</span><span><b>WASM/wazero worker.</b> A third <code>Worker</code> body behind the same seam — evaluate only if Privsep-lite proves insufficient.</span></div>
+        <div class="def"><span class="dot">▹</span><span><b>gokrazy deployment.</b> Pi OS + systemd ships M0–M4; gokrazy (read-only root, A/B OTA) is a later look — it forces Go PiSugar2 drivers + polling.</span></div>
+        <div class="def"><span class="dot">▹</span><span><b>Additional transport adapters</b> (group chat, web, multi-user keying) — architected, not implemented; new <code>transport/</code> adapters, no core change.</span></div>
+        <div class="def"><span class="dot">▹</span><span><b>Multi-pet / multi-user.</b> Schema shaped for it (AD-7); single-owner now via a non-breaking <code>chat_id</code>/<code>user_id</code> add.</span></div>
+        <div class="def"><span class="dot">▹</span><span><b>Heap-fragmentation guard.</b> <code>sync.Pool</code> per-turn buffers + an RSS-flat-across-50-turns check confirms the goroutine-worker is sufficient.</span></div>
+        <div class="def"><span class="dot">▹</span><span><b>Reflex / scheduler job catalogue, credit-budget number, battery thresholds, BLE pairing UX</b> — story-time / runtime config, not spine invariants.</span></div>
+        <div class="def"><span class="dot">▹</span><span><b>Learning-promotion heuristics</b> (impact + recurrence judgment) — runtime detail of the dream turn (AD-15).</span></div>
+        <div class="def"><span class="dot">▹</span><span><b>Exact LLM model id + per-provider config</b> — broker config (default GLM via base-URL swap), not spine.</span></div>
+        <div class="def"><span class="dot">▹</span><span><b>Sound-out / always-on audio</b> — spec non-goals.</span></div>
+      </div>
+    </section>
+
+    <!-- 9. STACK -->
+    <section id="stack">
+      <p class="sec-kicker">09 · The build substrate</p>
+      <h2>Stack</h2>
+      <p class="lead">Pure-Go, <code>CGO_ENABLED=0</code>, <code>GOARCH=arm64</code>, Go 1.25+. Single static binary, gokrazy-friendly.</p>
+      <div class="stack-grid">
+        <div class="si"><b>Go 1.25+</b><span>CGO_ENABLED=0 · arm64</span></div>
+        <div class="si"><b>modernc.org/sqlite</b><span>pure-Go · FTS5</span></div>
+        <div class="si"><b>periph.io/x/host/v3</b><span>+ warthog618/go-gpiocdev</span></div>
+        <div class="si"><b>google/renameio/v2</b><span>atomic markdown writes</span></div>
+        <div class="si"><b>thejerf/suture/v4</b><span>supervisor tree</span></div>
+        <div class="si"><b>failsafe-go</b><span>retry · breaker · fallback</span></div>
+        <div class="si"><b>anthropic-sdk-go</b><span>provider (broker/internal)</span></div>
+        <div class="si"><b>sashabaranov/go-openai</b><span>GLM / OpenAI / OpenRouter</span></div>
+        <div class="si"><b>ollama/ollama/api</b><span>LAN provider</span></div>
+        <div class="si"><b>mymmrac/telego</b><span>chat transport adapter</span></div>
+        <div class="si"><b>depguard</b><span>LLM-free-core CI fence</span></div>
+        <div class="si"><b>Pi OS 64-bit + systemd</b><span>gokrazy deferred</span></div>
+      </div>
+      <p style="margin-top:18px;font-family:var(--mono);font-size:12px;color:var(--ink-3)">
+        Build: <code>GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -ldflags="-s -w"</code>.
+        Runtime tuning (not invariant): <code>GOMEMLIMIT≈280MiB</code>, <code>GOGC=50</code>.
+        Do <b>not</b> set <code>GOARM64=v8.0,lse</code> — the Cortex-A53 lacks LSE atomics.
+        systemd: <code>MemoryHigh=180M</code> &lt; <code>MemoryMax=220M</code>, <code>OOMPolicy=stop</code>, <code>Restart=always</code>.
+      </p>
+    </section>
+
+  </main>
+</div>
+
+<footer>
+  <div class="pet">    ┌─────────┐
+    │  -   -  │   sheldon is sleeping. checkpoint written. journald flushed.
+    │    ◡    │
+    └─────────┘</div>
+  ARCHITECTURE SPINE — sheldon (Go rewrite) · status: final · 2026-06-19<br>
+  A consistency contract, not a design document. Structure is seed — the code owns the detail once it exists.<br>
+  Sourced from ARCHITECTURE-SPINE.md + .memlog.md · 17 decisions (AD-1..AD-17) · 11 capabilities (CAP-1..CAP-11).
+</footer>
+
+<script>
+  // sticky-nav active-section highlighting
+  (function(){
+    var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+    var map = {};
+    links.forEach(function(a){
+      var id = a.getAttribute('href').slice(1);
+      var sec = document.getElementById(id);
+      if(sec) map[id] = a;
+    });
+    var sections = links.map(function(a){return document.getElementById(a.getAttribute('href').slice(1));}).filter(Boolean);
+
+    var obs = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          links.forEach(function(l){l.classList.remove('active');});
+          var act = map[e.target.id];
+          if(act) act.classList.add('active');
+        }
+      });
+    }, {rootMargin:'-10% 0px -75% 0px', threshold:0});
+    sections.forEach(function(s){obs.observe(s);});
+  })();
+</script>
+
+</body>
+</html>

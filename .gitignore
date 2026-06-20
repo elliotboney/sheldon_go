@@ -1,0 +1,13 @@
+# BMad / agent tooling — install state, not project content
+.claude/
+.opencode/
+.agents/
+_bmad/
+
+# OS / editor cruft
+.DS_Store
+
+# Go build output (arrives with M0)
+/bin/
+*.test
+*.out

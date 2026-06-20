@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>sheldon · architecture brainstorm · 2026-06-19</title>
+<style>
+  /* ===== E-Ink grayscale palette ===== */
+  :root{
+    --paper:#dfddd4;        /* warm e-paper off-white */
+    --paper2:#cfccc1;
+    --ink:#1b1b18;          /* near-black ink */
+    --ink2:#3a3a34;
+    --mid:#6b6a60;
+    --faint:#9a988c;
+    --ghost:#b9b7aa;
+    --hair:#a8a698;
+    --shadow:rgba(27,27,24,.16);
+    --mono:"SF Mono","SFMono-Regular",ui-monospace,"DejaVu Sans Mono","Consolas","Liberation Mono",Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.012) 0 1px, transparent 1px 3px),
+      var(--paper);
+    color:var(--ink);
+    font-family:var(--mono);
+    font-size:15px;
+    line-height:1.55;
+    letter-spacing:.1px;
+    -webkit-font-smoothing:none;
+    text-rendering:geometricPrecision;
+  }
+  /* subtle dither overlay */
+  body::before{
+    content:"";
+    position:fixed;inset:0;pointer-events:none;z-index:1;
+    background-image:radial-gradient(rgba(27,27,24,.05) .5px, transparent .5px);
+    background-size:3px 3px;
+    mix-blend-mode:multiply;
+    opacity:.5;
+  }
+  .wrap{max-width:860px;margin:0 auto;padding:0 22px 120px;position:relative;z-index:2}
+
+  a{color:inherit}
+  ::selection{background:var(--ink);color:var(--paper)}
+
+  /* ===== Header / the face ===== */
+  header{padding:54px 0 26px;text-align:center}
+  .screen{
+    display:inline-block;
+    border:3px solid var(--ink);
+    border-radius:14px;
+    padding:26px 30px 20px;
+    background:linear-gradient(180deg,#e7e5dc,#d4d1c6);
+    box-shadow:0 6px 0 var(--shadow), inset 0 0 0 3px var(--paper);
+    position:relative;
+  }
+  .screen::after{
+    content:"E-INK · 250×122 · 2-BIT";
+    position:absolute;bottom:-9px;right:14px;
+    font-size:9px;letter-spacing:2px;color:var(--mid);
+    background:var(--paper);padding:0 6px;
+  }
+  /* the pixel face */
+  .face{
+    font-size:34px;line-height:1;letter-spacing:6px;
+    display:flex;gap:14px;justify-content:center;align-items:center;
+    margin-bottom:10px;
+  }
+  .eye{
+    width:30px;height:30px;background:var(--ink);
+    border-radius:7px;position:relative;
+    animation:blink 5.5s infinite steps(1);
+  }
+  .eye::after{ /* eye shine pixel */
+    content:"";position:absolute;top:5px;left:5px;width:7px;height:7px;background:var(--paper);
+  }
+  .eye.r{animation-delay:.06s}
+  @keyframes blink{
+    0%,92%,100%{height:30px;transform:translateY(0)}
+    94%,98%{height:5px;transform:translateY(12px)}
+  }
+  .mouth{
+    width:26px;height:26px;margin-left:4px;
+    border:5px solid var(--ink);border-top:0;border-radius:0 0 30px 30px;
+    animation:hum 4s infinite ease-in-out;
+  }
+  @keyframes hum{0%,100%{width:26px}50%{width:16px}}
+  .title{font-size:26px;font-weight:700;letter-spacing:1px;margin:4px 0 2px}
+  .title .arrow{color:var(--mid)}
+  .subtitle{color:var(--ink2);font-size:13px;letter-spacing:.5px}
+  .sub2{color:var(--mid);font-size:11px;margin-top:8px;letter-spacing:1.5px}
+
+  /* ===== meta ribbon ===== */
+  .ribbon{
+    display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:24px 0 8px;
+  }
+  .chip{
+    border:2px solid var(--ink);background:var(--paper);
+    padding:5px 11px;font-size:11px;letter-spacing:.5px;
+    box-shadow:2px 2px 0 var(--shadow);
+  }
+  .chip b{font-weight:700}
+  .stat{font-size:11px;color:var(--mid)}
+
+  /* counters */
+  .counters{display:flex;gap:14px;justify-content:center;margin:22px 0 4px;flex-wrap:wrap}
+  .ctr{border:2px dashed var(--hair);padding:10px 16px;text-align:center;min-width:96px}
+  .ctr .n{font-size:30px;font-weight:700;line-height:1}
+  .ctr .l{font-size:10px;letter-spacing:1.5px;color:var(--mid);margin-top:4px}
+
+  /* ===== the wire ===== */
+  .wire{
+    border:3px solid var(--ink);background:var(--paper);
+    margin:34px 0;padding:18px 20px;position:relative;
+    box-shadow:5px 5px 0 var(--shadow);
+  }
+  .wire .tag{
+    position:absolute;top:-12px;left:16px;background:var(--ink);color:var(--paper);
+    font-size:10px;letter-spacing:2px;padding:3px 9px;
+  }
+  .wire h2{margin:8px 0 6px;font-size:16px}
+  .wire p{margin:6px 0;font-size:13.5px;color:var(--ink2)}
+  .vault{display:flex;align-items:center;gap:10px;justify-content:center;margin:14px 0 4px;flex-wrap:wrap}
+  .box{border:2px solid var(--ink);padding:8px 12px;font-size:11px;background:var(--paper2)}
+  .box.danger{border-style:double;border-width:4px}
+  .box.vault-b{background:var(--ink);color:var(--paper)}
+  .link{color:var(--mid);font-size:18px}
+
+  /* ===== waves ===== */
+  .wave{margin:54px 0;scroll-margin-top:20px}
+  .wave-head{display:flex;align-items:baseline;gap:14px;border-bottom:3px solid var(--ink);padding-bottom:6px;margin-bottom:18px}
+  .wnum{font-size:40px;font-weight:700;line-height:.8;color:var(--ghost)}
+  .wname{font-size:19px;font-weight:700;letter-spacing:.5px}
+  .wkick{font-size:11px;color:var(--mid);letter-spacing:.5px;margin-left:auto;text-align:right;max-width:300px}
+
+  .idea{
+    border-left:4px solid var(--ghost);padding:7px 0 7px 14px;margin:11px 0;
+    font-size:13.5px;color:var(--ink2);
+  }
+  .idea:hover{border-left-color:var(--ink);background:rgba(27,27,24,.025)}
+  .idea b{color:var(--ink);font-weight:700}
+  .idea .by{font-size:10px;color:var(--faint);letter-spacing:1px;display:block;margin-bottom:2px}
+  .insight{
+    border:2px solid var(--ink);background:var(--paper2);padding:11px 14px;margin:13px 0;
+    font-size:13px;
+  }
+  .insight::before{content:"★ INSIGHT ";font-size:10px;letter-spacing:2px;color:var(--ink);font-weight:700}
+
+  /* W1 — three-legged stool */
+  .stool{display:flex;gap:18px;justify-content:center;align-items:flex-end;margin:18px 0;flex-wrap:wrap}
+  .leg{width:120px;text-align:center}
+  .leg .top{border:2px solid var(--ink);padding:10px 6px;font-size:11px;font-weight:700;background:var(--paper)}
+  .leg .stem{height:46px;width:8px;background:var(--ink);margin:0 auto}
+  .leg.kicked{opacity:.35}
+  .leg.kicked .stem{background:repeating-linear-gradient(45deg,var(--ink) 0 4px,transparent 4px 8px)}
+  .leg.kicked .top{border-style:dashed;text-decoration:line-through}
+  .leg .verdict{font-size:10px;margin-top:6px;letter-spacing:1px;color:var(--mid)}
+  .leg.kept .top{box-shadow:3px 3px 0 var(--shadow)}
+
+  /* W2 — analogy gallery */
+  .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin:16px 0}
+  .card{border:2px solid var(--ink);background:var(--paper);padding:11px 12px;box-shadow:3px 3px 0 var(--shadow)}
+  .card .name{font-weight:700;font-size:13px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
+  .card .vote{font-size:9px;border:1px solid var(--ink);padding:1px 5px;letter-spacing:.5px}
+  .card .body{font-size:11.5px;color:var(--ink2);line-height:1.45}
+  .split{border:2px dashed var(--hair);padding:10px 14px;margin-top:14px;font-size:12.5px;text-align:center;color:var(--ink2)}
+
+  /* W3 — constraint dials */
+  .dials{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin:16px 0}
+  .dial{border:2px solid var(--ink);padding:10px 12px;background:var(--paper)}
+  .dial .knob{font-size:11px;font-weight:700;letter-spacing:1px;color:var(--ink);margin-bottom:5px;display:flex;justify-content:space-between}
+  .dial .knob span{color:var(--mid);font-weight:400}
+  .dial .out{font-size:11.5px;color:var(--ink2);line-height:1.45}
+
+  /* W4 — unlocks */
+  .unlocks{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:11px;margin:16px 0}
+  .ul{border:2px solid var(--ink);background:var(--paper);padding:10px 12px;position:relative;box-shadow:3px 3px 0 var(--shadow)}
+  .ul .k{font-size:10px;font-weight:700;letter-spacing:1px;color:var(--mid);margin-bottom:4px}
+  .ul .v{font-size:12px;color:var(--ink2);line-height:1.45}
+  .ul .v b{color:var(--ink)}
+
+  /* W5 — morphological matrix */
+  .matrix{width:100%;border-collapse:collapse;margin:16px 0;font-size:11.5px}
+  .matrix th,.matrix td{border:2px solid var(--ink);padding:8px 9px;text-align:left;vertical-align:top}
+  .matrix th{background:var(--ink);color:var(--paper);font-size:10px;letter-spacing:1px}
+  .matrix td b{display:block;font-size:12.5px;margin-bottom:3px}
+  .matrix .pick{background:var(--paper2)}
+  .matrix tr.winner td{background:#c9c6ba;box-shadow:inset 0 0 0 2px var(--ink)}
+
+  /* ===== climax / decision ===== */
+  .climax{margin:64px 0 40px}
+  .climax-head{text-align:center;margin-bottom:8px}
+  .climax-head .eyebrow{font-size:11px;letter-spacing:4px;color:var(--mid)}
+  .hero{
+    border:4px double var(--ink);background:var(--paper);
+    padding:26px 24px;margin:18px 0;position:relative;
+    box-shadow:8px 8px 0 var(--shadow);
+  }
+  .hero .stamp{
+    position:absolute;top:14px;right:14px;
+    border:3px solid var(--ink);color:var(--ink);
+    font-size:11px;font-weight:700;letter-spacing:2px;padding:6px 12px;
+    transform:rotate(7deg);opacity:.85;
+  }
+  .hero h2{font-size:22px;margin:0 0 8px;max-width:520px}
+  .hero .lede{font-size:14px;color:var(--ink2);max-width:560px;margin-bottom:16px}
+  .seam{
+    display:flex;flex-direction:column;align-items:center;gap:0;margin:20px 0;
+  }
+  .contract{border:3px solid var(--ink);background:var(--ink);color:var(--paper);padding:10px 16px;font-size:12.5px;letter-spacing:.5px;text-align:center}
+  .contract small{display:block;color:var(--ghost);font-size:10px;letter-spacing:1px;margin-top:3px}
+  .seamline{width:3px;height:26px;background:var(--ink)}
+  .impls{display:flex;gap:14px;flex-wrap:wrap;justify-content:center}
+  .impl{border:2px solid var(--ink);background:var(--paper);padding:9px 14px;font-size:12px;text-align:center;min-width:120px}
+  .impl .when{display:block;font-size:9px;letter-spacing:1px;color:var(--mid);margin-top:3px}
+  .impl.now{background:var(--paper2);box-shadow:3px 3px 0 var(--shadow)}
+  .impl.later{border-style:dashed}
+
+  /* scorecard */
+  .score{width:100%;border-collapse:collapse;margin:18px 0;font-size:11.5px}
+  .score th,.score td{border:2px solid var(--ink);padding:8px 10px;text-align:left}
+  .score th{background:var(--ink);color:var(--paper);font-size:10px;letter-spacing:1px}
+  .score td b{font-size:12.5px}
+  .score .imp{font-weight:700}
+  .score tr.win td{background:#c9c6ba}
+  .score tr.win td:first-child{box-shadow:inset 4px 0 0 var(--ink)}
+  .badge{font-size:9px;border:1px solid var(--ink);padding:1px 6px;letter-spacing:.5px;white-space:nowrap}
+
+  /* PMI */
+  .pmi{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin:22px 0}
+  .pmi div{border:2px solid var(--ink);padding:12px 14px;background:var(--paper)}
+  .pmi .lab{font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:6px;border-bottom:2px solid var(--ink);padding-bottom:4px}
+  .pmi p{margin:0;font-size:12px;color:var(--ink2)}
+  .pmi .P .lab{color:var(--ink)}
+  .pmi .M{background:var(--paper2)}
+
+  /* synthesis */
+  .synth{margin:50px 0}
+  .synth h2{text-align:center;font-size:18px;letter-spacing:2px;border-bottom:3px solid var(--ink);padding-bottom:8px}
+  .synth h2 small{display:block;font-size:11px;color:var(--mid);letter-spacing:1px;font-weight:400;margin-top:4px}
+  .sgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+  .scell{border:2px solid var(--ink);padding:14px 16px;background:var(--paper);position:relative}
+  .scell .num{position:absolute;top:-12px;left:14px;background:var(--paper);border:2px solid var(--ink);width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+  .scell .eq{font-weight:700;font-size:13.5px;margin:4px 0 6px}
+  .scell p{margin:0;font-size:12px;color:var(--ink2);line-height:1.5}
+  .scell .plus{color:var(--ink);font-weight:700}
+
+  /* default end-state */
+  .endstate{border:3px solid var(--ink);background:var(--ink);color:var(--paper);padding:16px 20px;margin:34px 0;box-shadow:6px 6px 0 var(--shadow)}
+  .endstate .k{font-size:11px;letter-spacing:3px;color:var(--ghost)}
+  .endstate .v{font-size:16px;font-weight:700;margin:6px 0 4px}
+  .endstate p{margin:0;font-size:12.5px;color:#cfccc1}
+
+  footer{text-align:center;margin-top:64px;padding-top:24px;border-top:3px solid var(--ink);color:var(--mid);font-size:11px;letter-spacing:1px}
+  footer .face-mini{font-size:20px;letter-spacing:4px;margin-bottom:8px}
+
+  @media(max-width:560px){
+    .sgrid{grid-template-columns:1fr}
+    .wkick{display:none}
+    .wnum{font-size:30px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ================= HEADER ================= -->
+  <header>
+    <div class="screen">
+      <div class="face">
+        <div class="eye l"></div>
+        <div class="eye r"></div>
+        <div class="mouth"></div>
+      </div>
+      <div class="title">sheldon <span class="arrow">→</span> go</div>
+      <div class="subtitle">architecture brainstorm · the great rewrite</div>
+      <div class="sub2">A TAMAGOTCHI DEVLOG · 2026-06-19</div>
+    </div>
+    <div class="counters">
+      <div class="ctr"><div class="n" data-count="63">0</div><div class="l">LOG ENTRIES</div></div>
+      <div class="ctr"><div class="n" data-count="53">0</div><div class="l">IDEAS</div></div>
+      <div class="ctr"><div class="n" data-count="5">0</div><div class="l">WAVES</div></div>
+      <div class="ctr"><div class="n" data-count="5">0</div><div class="l">CANDIDATES</div></div>
+    </div>
+    <div class="ribbon">
+      <span class="chip"><b>MODE</b> · ideate for me</span>
+      <span class="chip"><b>SUBJECT</b> · E-Ink AI pet on a Pi Zero 2W</span>
+      <span class="chip"><b>STACK</b> · Python → Go</span>
+      <span class="chip"><b>GOAL</b> · confident enough to build</span>
+    </div>
+  </header>
+
+  <!-- ================= THE LIVE WIRE ================= -->
+  <section class="wire">
+    <span class="tag">THE LIVE WIRE</span>
+    <h2>How do you keep the untrusted brain away from the secret heart?</h2>
+    <p>The LLM <b>worker</b> assembles prompts from web-influenced text. If injected text talks it into leaking the <b>vault</b>, the pet betrays itself. The whole session orbits one boundary question.</p>
+    <div class="vault">
+      <div class="box danger">WORKER<br><small>untrusted · reads the web</small></div>
+      <span class="link">⟶ ??? ⟶</span>
+      <div class="box vault-b">VAULT<br><small>secrets · the soul's keys</small></div>
+    </div>
+    <p style="text-align:center;font-size:12px;color:var(--mid)">goroutine? · subprocess + uid? · WASM sandbox? — <b>A / B / C</b></p>
+  </section>
+
+  <!-- ================= WAVE 1 ================= -->
+  <section class="wave">
+    <div class="wave-head">
+      <span class="wnum">01</span>
+      <span class="wname">First Principles</span>
+      <span class="wkick">Strip the v2 spine to invariants. Challenge every "must" from Go's vantage.</span>
+    </div>
+
+    <p style="font-size:12.5px;color:var(--mid);margin-bottom:6px">The v2 spine stood on three legs. Go kicks out two.</p>
+    <div class="stool">
+      <div class="leg kicked">
+        <div class="top">BOUNDED RAM</div>
+        <div class="stem"></div>
+        <div class="verdict">GC gives it free</div>
+      </div>
+      <div class="leg kicked">
+        <div class="top">WARM REFLEXES</div>
+        <div class="stem"></div>
+        <div class="verdict">just ticker goroutines</div>
+      </div>
+      <div class="leg kept">
+        <div class="top">SECURITY WALL</div>
+        <div class="stem"></div>
+        <div class="verdict">★ only leg left</div>
+      </div>
+    </div>
+
+    <div class="idea"><span class="by">coach</span>The fork-server was v2's load-bearing bet to protect <b>bounded RAM</b> — Go gives that free, so the bet's value is now <b>zero</b>. The question it answered re-emerges as a <b>fault</b> question, not a memory one.</div>
+    <div class="idea"><span class="by">coach</span>Reframe "≤1 worker": in Go RAM isn't the constraint, so keep ≤1 not for megabytes but for <b>coherence</b> (one train of thought) + <b>cost</b> (budget). The pet has one mind, not few bytes.</div>
+    <div class="idea"><span class="by">coach</span>Third isolation primitive: the worker as a <b>WASM sandbox via wazero</b> — prompt-assembly runs in linear memory with no ambient authority. Sits between goroutine (no isolation) and subprocess (OS isolation), stays single-binary.</div>
+    <div class="idea"><span class="by">coach</span><b>Inversion:</b> don't isolate the worker — isolate the <b>secrets</b>. A tiny secrets-keeper holds the vault; broker queries it. Blast radius of a collapse becomes "everything except secrets" — a sharper boundary.</div>
+    <div class="idea"><span class="by">coach</span>Secrets-never-in-worker: the broker injects creds at the <b>egress moment</b>; the worker never receives them. Single-process makes this necessary-but-insufficient — the cleanest argument for keeping exactly ONE process boundary.</div>
+
+    <div class="insight">v2 optimized for <b>Python's</b> failure modes (OOM, GIL, cheap fork). Go should optimize for <b>Go's</b>: goroutine leaks, shared-memory races, panic propagation. Different enemies → different shape.</div>
+    <div class="insight">The vault requirement, said precisely: not "separate process" but "the thing touching web-influenced text cannot read secrets." A goroutine shares the address space, so it's <b>insufficient by definition</b>. The real requirement is address-space separation — only the <i>kind</i> is open (process vs WASM linear memory).</div>
+  </section>
+
+  <!-- ================= WAVE 2 ================= -->
+  <section class="wave">
+    <div class="wave-head">
+      <span class="wnum">02</span>
+      <span class="wname">Analogical Thinking</span>
+      <span class="wkick">Who else runs untrusted compute behind a trust boundary — and what did they pick?</span>
+    </div>
+
+    <div class="gallery">
+      <div class="card"><div class="name">Web Browser <span class="vote">→ C/A</span></div><div class="body">A tab = separate OS process; the kernel holds cookies. Chrome chose process isolation because shared memory wasn't safe. Worker = a tab.</div></div>
+      <div class="card"><div class="name">AWS Lambda <span class="vote">weak</span></div><div class="body">Untrusted code in Firecracker microVMs, one per invocation. But that's <b>multi-tenancy</b>; sheldon is single-tenant.</div></div>
+      <div class="card"><div class="name">Game Mods <span class="vote">→ WASM</span></div><div class="body">Mods run in a sandboxed Lua VM <i>inside</i> the host — capability-restricted, not a process. The wazero pedigree.</div></div>
+      <div class="card"><div class="name">Payment Terminal <span class="vote">→ keeper</span></div><div class="body">A secure element holds keys on separate silicon; the app never sees the key, only asks it to sign. Broker-as-keeper, in hardware.</div></div>
+      <div class="card"><div class="name">qmail / postfix <span class="vote">→ A</span></div><div class="body">A monolith split into tiny single-uid processes over pipes. Bernstein privilege separation — 25-year-proven. The spine is qmail-shaped.</div></div>
+      <div class="card"><div class="name">OpenSSH privsep <span class="vote">★ steal</span></div><div class="body">Network-facing code in a chroot+unpriv child; a monitor holds privilege & validates requests. <b>Worker proposes, monitor disposes.</b></div></div>
+      <div class="card"><div class="name">AV Detonation <span class="vote">overkill</span></div><div class="body">Suspicious files detonated in a throwaway VM. "Die after a turn" is detonation — but our Result is trusted-after-validation. Buys fault-reset, not security.</div></div>
+      <div class="card"><div class="name">seL4 / Fuchsia <span class="vote">→ WASM</span></div><div class="body">No ambient authority — only what you were handed a capability for. Hand the worker call-model + read-history, nothing else. wazero host-fns enforce it.</div></div>
+    </div>
+
+    <div class="split">The analogies <b>split by tenancy</b> ⟶ multi-tenant (browser, Lambda) spends heavily on process/VM isolation; single-tenant embedded (game mods, your desk pet) accepts in-process sandboxing. sheldon is single-tenant — the WASM sandbox is more defensible than the browser analogy first suggests.</div>
+  </section>
+
+  <!-- ================= WAVE 3 ================= -->
+  <section class="wave">
+    <div class="wave-head">
+      <span class="wnum">03</span>
+      <span class="wname">Constraint Shifting</span>
+      <span class="wkick">Warp the givens — RAM, network, hardware, time — and watch the architecture fall out.</span>
+    </div>
+
+    <div class="dials">
+      <div class="dial"><div class="knob">RAM <span>512MB → 4GB</span></div><div class="out">Frugality apparatus is pointless — run one fat process. Proves frugality is <b>hardware-contingent</b>: make it a build flag, not a bone.</div></div>
+      <div class="dial"><div class="knob">RAM <span>512MB → 256MB</span></div><div class="out">Go's ~5-10MB runtime floor <i>per process</i> bites. 5 processes = 50MB pure overhead. Tight RAM <b>argues for single-process collapse</b>.</div></div>
+      <div class="dial"><div class="knob">NET <span>online → zero</span></div><div class="out">Degrade to Ollama-LAN or reflex-only. "No brain available" must be <b>first-class</b>, not an error. Offline is a personality mode.</div></div>
+      <div class="dial"><div class="knob">FLEET <span>1 pet → 5 pets</span></div><div class="out">Multi-tenancy returns; the browser analogy bites. Build the one wall so it survives going multi-user. <b>Build it once, right.</b></div></div>
+      <div class="dial"><div class="knob">TURN <span>fast → 30s</span></div><div class="out">The pet must stay expressive while it grinds. Reflexes-as-goroutines keep the face <b>blinking</b>, never blocked on the worker.</div></div>
+      <div class="dial"><div class="knob">SCREEN <span>E-Ink → terminal</span></div><div class="out">Display becomes stdout ANSI art. Make display an <b>interface+goroutine</b>, swappable by constructor — favours single-process.</div></div>
+      <div class="dial"><div class="knob">DEPLOY <span>systemd → gokrazy</span></div><div class="out">No fork/subprocess on a read-only appliance could <b>force WASM</b> — wazero needs no second uid. Deploy & isolation are coupled.</div></div>
+      <div class="dial"><div class="knob">TURN <span>slow → 50ms</span></div><div class="out">If instant & free, never separate at all. Slowness wants async; untrust wants isolation — <b>decouple the two needs.</b></div></div>
+    </div>
+
+    <div class="insight"><b>Key tension:</b> more processes = more isolation BUT more runtime overhead (each pays the floor). On 512MB, Option C (2 processes) is the sweet spot — one security boundary at the cost of one extra runtime floor.</div>
+    <div class="insight"><b>Deployment ↔ isolation coupling:</b> Pi OS + systemd makes uid-separated subprocess natural; gokrazy appliance makes in-process WASM natural. You can't pick the isolation primitive independently of the deploy target — <b>decide them together.</b></div>
+  </section>
+
+  <!-- ================= WAVE 4 ================= -->
+  <section class="wave">
+    <div class="wave-head">
+      <span class="wnum">04</span>
+      <span class="wname">Provocation · What Go Unlocks</span>
+      <span class="wkick">Not plumbing — character. What can the pet's soul do now that Python never let it?</span>
+    </div>
+
+    <div class="unlocks">
+      <div class="ul"><div class="k">CHEAP GOROUTINES</div><div class="v">Dozens of tiny <b>instincts</b> at once — hunger, boredom, affection-decay, ambient-light. The soul gets richer because concurrency got cheaper.</div></div>
+      <div class="ul"><div class="k">ONE STATIC BINARY</div><div class="v"><b>Pet teleportation.</b> binary + ~/.shelldon = the pet's whole being. Clone, gift, restore as first-class features.</div></div>
+      <div class="ul"><div class="k">DEFER + CONTEXT</div><div class="v">A real <b>death / sleep ritual</b> on SIGTERM — say goodbye, checkpoint, dim the face. Shutdown becomes a character moment.</div></div>
+      <div class="ul"><div class="k">synctest FAKE CLOCK</div><div class="v"><b>Time-travel the pet</b> in tests — fast-forward a week of mood drift, assert it gets lonely. Unit-test the emotional arc.</div></div>
+      <div class="ul"><div class="k">CHANNELS</div><div class="v">The inner life is <b>observable</b> — tap the envelope bus for a live stream of thoughts. A debug TUI into consciousness.</div></div>
+      <div class="ul"><div class="k">RAW SPEED</div><div class="v">Reflexes at <b>animation framerate</b> — smooth E-Ink micro-expressions via a 10Hz goroutine. The pet can <b>fidget</b>.</div></div>
+      <div class="ul"><div class="k">LOW RAM × BINARY</div><div class="v">Run <b>two pets</b> on one Pi (a pet + a familiar) gossiping over the bus. Address the bus so pet #2 is a non-breaking add.</div></div>
+      <div class="ul"><div class="k">STRUCT EMBEDDING</div><div class="v">Personality as <b>composable traits</b> — Curious / Grumpy / Clingy mixins. Swap traits to breed pets from one codebase.</div></div>
+      <div class="ul"><div class="k">depguard</div><div class="v">Mechanically guarantee the <b>soul never depends on the brain</b>. Swap GLM→Ollama→Claude; same pet, different eyes.</div></div>
+      <div class="ul"><div class="k">pprof</div><div class="v">Ask <b>"what is the pet spending its life thinking about?"</b> Flame-graph idling vs chatting vs dreaming. Introspection.</div></div>
+    </div>
+
+    <div class="insight" style="margin-top:18px">"The soul is the constant, the brain is a costume" — with depguard, that line becomes a <b>build invariant</b>, not a slogan.</div>
+  </section>
+
+  <!-- ================= WAVE 5 ================= -->
+  <section class="wave">
+    <div class="wave-head">
+      <span class="wnum">05</span>
+      <span class="wname">Morphological</span>
+      <span class="wkick">Build concrete candidates from the dimensions: isolation × deploy × bus.</span>
+    </div>
+
+    <table class="matrix">
+      <thead><tr><th style="width:22%">CANDIDATE</th><th>ISOLATION</th><th>SHAPE</th><th>THE BET</th></tr></thead>
+      <tbody>
+        <tr><td><b>Monolith+</b></td><td class="pick">none · discipline</td><td>1 process · all goroutines · channel bus</td><td>Fastest, smallest RAM. Accepts a same-process compromise could reach the vault. Honest single-tenant bet.</td></tr>
+        <tr><td><b>Privsep</b><br>(=Option C)</td><td class="pick">uid + subprocess</td><td>2 processes · worker re-exec per turn over UDS</td><td>The OpenSSH shape. One boundary, one extra runtime. Vault OS-unreadable to the worker uid. Research's pick.</td></tr>
+        <tr><td><b>WASM-soul</b></td><td class="pick">linear memory</td><td>1 process · worker = wazero module</td><td>Only host-fns for call-model + read-history; no vault host-fn exists. Single binary, appliance-friendly. Novel; cost = compile + A53 perf.</td></tr>
+        <tr><td><b>Secrets-keeper</b></td><td class="pick">invert: isolate 1KB</td><td>1 big process + tiny vault process that signs on request</td><td>Shrink the trusted-separate surface to the secrets themselves. Smallest possible boundary.</td></tr>
+        <tr class="winner"><td><b>Two-tier fallback</b> ★</td><td class="pick">deferred / pluggable</td><td>Worker behind a Go INTERFACE; transport swappable</td><td>Monolith+ at M0-M2, swap Privsep/WASM at M3 <b>without touching callers</b>. Decide with data, not a bet.</td></tr>
+      </tbody>
+    </table>
+
+    <div class="insight"><b>BIG UNLOCK:</b> if the worker is a Go interface <code>AssembleAndPropose(ctx, turn) Result</code>, then Monolith+ / Privsep / WASM are just three <b>implementations</b> of it. You don't pick now — you design the <b>seam</b> now. A/B/C becomes a deferrable implementation choice behind a fixed contract.</div>
+    <div class="idea"><span class="by">coach</span><b>Privsep-lite hybrid:</b> a long-lived subprocess (not per-turn) holding warm state, recycled on panic or every N turns — fault isolation + uid wall <i>without</i> per-turn spawn cost on the slow A53.</div>
+    <div class="insight">The fork-server's two goals split cleanly in Go: <b>bounded-RAM = GC</b> (free, no process); <b>warm-start = a recycled worker subprocess</b> (Privsep-lite). What Python fused into <code>os.fork()</code>, Go solves with two simpler mechanisms.</div>
+  </section>
+
+  <!-- ================= CLIMAX ================= -->
+  <section class="climax">
+    <div class="climax-head"><div class="eyebrow">CONVERGE · IMPACT-EFFORT + PMI</div></div>
+
+    <div class="hero">
+      <div class="stamp">DECIDED</div>
+      <h2>Design the seam now. Defer the bet to M3.</h2>
+      <p class="lede">Don't pick A/B/C. Pick the <b>contract</b>. Ship the simplest implementation, and let real data — not anxiety — choose the isolation wall later. Highest impact, lowest regret: unblocks building <b>today</b> without foreclosing security.</p>
+
+      <div class="seam">
+        <div class="contract">interface Worker · AssembleAndPropose(ctx, turn) → Result<small>Envelope / Job / Result — contract-stable, transport-swappable</small></div>
+        <div class="seamline"></div>
+        <div class="impls">
+          <div class="impl now">Monolith+<span class="when">M0–M2 · SHIP NOW</span></div>
+          <div class="impl later">Privsep-lite<span class="when">M3 · DEFAULT TARGET</span></div>
+          <div class="impl later">WASM-soul<span class="when">M3+ · IF gokrazy</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- scorecard -->
+    <table class="score">
+      <thead><tr><th style="width:24%">CANDIDATE</th><th>IMPACT</th><th>EFFORT</th><th>VERDICT</th></tr></thead>
+      <tbody>
+        <tr class="win"><td><b>Two-tier fallback</b></td><td class="imp">high</td><td>low</td><td><span class="badge">★ WIN</span> the seam <i>is</i> the deliverable</td></tr>
+        <tr><td><b>Privsep</b></td><td class="imp">high</td><td>med</td><td><span class="badge">M3 DEFAULT</span> the target to swap in</td></tr>
+        <tr><td><b>Monolith+</b></td><td>med</td><td>low</td><td><span class="badge">M0 IMPL</span> not a final answer</td></tr>
+        <tr><td><b>WASM-soul</b></td><td>high novelty</td><td>high</td><td><span class="badge">SPIKE</span> revisit if gokrazy</td></tr>
+        <tr><td><b>Secrets-keeper</b></td><td>med</td><td>med</td><td><span class="badge">FALLBACK</span> if Privsep proves heavy</td></tr>
+      </tbody>
+    </table>
+
+    <!-- PMI -->
+    <div class="pmi">
+      <div class="P"><div class="lab">PLUS</div><p>Build today · contract-stable · isolation becomes an <b>A/B test</b>, not a bet · the fork-server apparatus gets deleted.</p></div>
+      <div class="M"><div class="lab">MINUS</div><p>Requires discipline to keep secrets out of worker memory during the Monolith+ phase — a real interim exposure.</p></div>
+      <div><div class="lab">INTERESTING</div><p>The seam itself is the deliverable; the isolation choice becomes <b>empirical</b>. The threat model still gates M3 — but no longer blocks M0.</p></div>
+    </div>
+
+    <!-- default end-state -->
+    <div class="endstate">
+      <div class="k">IF FORCED TO NAME ONE END-STATE</div>
+      <div class="v">Privsep-lite — a long-lived, uid-separated, recycled worker subprocess on Pi OS + systemd</div>
+      <p>Preserves the AD-6 vault wall + AD-2 egress control, avoids per-turn spawn cost, keeps single-binary-per-component simplicity.</p>
+    </div>
+  </section>
+
+  <!-- ================= SYNTHESIS ================= -->
+  <section class="synth">
+    <h2>SYNTHESIS<small>where the ideas were secretly solving each other</small></h2>
+    <div class="sgrid">
+      <div class="scell"><div class="num">1</div><div class="eq">Decouple slow from untrusted</div><p><span class="plus">W3 → W5.</span> Stop forcing one mechanism to do async AND isolation. The goroutine does async; the chosen impl does isolation. That separation is what <i>enables</i> the interface-seam.</p></div>
+      <div class="scell"><div class="num">2</div><div class="eq">Shrink the trusted thing</div><p><span class="plus">W1 + W2 + W1.</span> Isolate-the-secrets, the secrets-keeper / payment-terminal, and broker-injects-at-egress are <b>one move</b> — shrink the trusted thing until the boundary is trivial to defend.</p></div>
+      <div class="scell"><div class="num">3</div><div class="eq">The boring idea won</div><p>The breakthrough is the dull one — <b>design the seam, defer the impl</b> — not the dazzling WASM. It converts the hardest decision from a bet into an experiment. WASM becomes one option behind the seam.</p></div>
+      <div class="scell"><div class="num">4</div><div class="eq">One wall, two directions</div><p>"Soul is a costume-wearing constant" (character) and depguard's LLM-free core (security) are the <b>same wall</b> drawn from two sides. The identity invariant and the security invariant are one.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="face-mini">[•‿•]</div>
+    sheldon · go-rewrite architecture · 63 entries · ~53 ideas · 5 waves<br>
+    the soul is the constant · the brain is a costume · the seam is the deliverable<br>
+    <span style="color:var(--faint)">— brainstorm closed · 2026-06-19 22:39 —</span>
+  </footer>
+
+</div>
+
+<script>
+  // count-up the headline numbers, then settle
+  (function(){
+    var els=document.querySelectorAll('.ctr .n');
+    els.forEach(function(el){
+      var target=+el.getAttribute('data-count'), n=0,
+          step=Math.max(1,Math.round(target/28));
+      var t=setInterval(function(){
+        n+=step;
+        if(n>=target){n=target;clearInterval(t);}
+        el.textContent=n;
+      },28);
+    });
+  })();
+</script>
+</body>
+</html>
