@@ -19,3 +19,7 @@
 - **Hub observability absent** — no `Registered()`, `Len()`, or metrics hook; debugging routing failures requires external tooling. File: `core/bus/hub.go`.
 - **Nil `Payload` forwarded without validation** — bus is dumb router; payload nil-checks belong at consumer. File: `core/bus/hub.go:57`.
 - **Empty-string `Kind` accepted in `Register`** — zero-value `Envelope` would route to it; validate at ingress if this becomes a concern. File: `core/bus/hub.go:43`.
+
+## Deferred from: code review of 1-3-worker-seam-interface-stub-1-in-flight-arbiter-gate (2026-06-20)
+
+- **`Submit` has no `ctx.Done()` arm** — a context cancelled before slot acquisition returns `ErrTurnInFlight` instead of `ctx.Err()`; callers can't distinguish "slot busy" from "context dead." Related to AD-11 turn fencing; deferred to the turn lifecycle story. File: `core/arbiter/arbiter.go:37-43`.
