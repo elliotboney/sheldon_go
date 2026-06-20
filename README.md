@@ -1,3 +1,5 @@
+![shelldon logo](assets/img/logo.png)
+
 # sheldon (Go)
 
 > An E-Ink AI pet for the Raspberry Pi Zero 2W — chat-first, remote-LLM brain, a face that lives on your desk. A ground-up **Go rewrite** of the Python [`sheldon`](https://github.com/elliotboney/shelldon) v2.
