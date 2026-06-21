@@ -37,6 +37,14 @@
 - **Silent `hub.Publish` error paths** — `_ = d.hub.Publish(...)` (dispatch) and `_ = a.hub.Publish(...)` (cli) drop `ErrNoRoute` with no log. Harmless at M0 (routes are statically registered at startup, so `ErrNoRoute` is unreachable at runtime), but worth a `slog.Warn` once AD-17 observability lands. Files: `core/dispatch/dispatch.go:53`, `transport/cli/cli.go:60`.
 - **`readLoop` goroutine not stoppable on ctx cancellation** — blocks on `bufio.Scanner.Scan()` until stdin EOF; cannot be cancelled by the supervisor's shutdown. Intentional, documented M0 deferral — a cancelable stdin is not an M0 concern; revisit if/when needed. File: `transport/cli/cli.go:41`.
 
+## Deferred from: code review of 2-1-personality-state-struct-periodic-checkpoint (2026-06-21)
+
+- **`Store.path` not validated in `New`** — empty-string path accepted silently; fails at first checkpoint instead of construction. File: `core/state/state.go:51`.
+- **`assertOnlyFile` test helper duplicated** — mirrors `core/memory/atomic_test.go`; a shared internal/testutil would eliminate the copy. File: `core/state/checkpoint_test.go:15`.
+- **Float64 `!=` comparison in test helpers** — fragile if future reflex arithmetic touches Mood/Energy values. File: `core/state/checkpoint_test.go:42`.
+- **No bounds/range enforcement in `SetMood`** — NaN/Inf is stored, checkpointed as JSON null, and silently replaces state on restore. File: `core/state/state.go:62`.
+- **Double write on shutdown when ticker and ctx.Done both ready** — Go's non-deterministic select can fire the ticker case before ctx.Done; benign extra SD write but counters NFR11 frugality. File: `core/state/checkpoint.go:62-71`.
+
 ## Deferred from: code review of 1-6-cross-compile-atomic-write-crash-safety-on-pi-run (2026-06-21)
 
 - **`WriteAtomic` gives opaque error when parent directory does not exist** — `renameio.WriteFile` fails with an OS error if the directory doesn't exist; no caller exists in M0 so this is latent. Revisit when Epic 4 wires the first real call site. File: `core/memory/atomic.go`.

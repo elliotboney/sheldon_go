@@ -4,7 +4,7 @@ baseline_commit: af0fbdf
 
 # Story 1.6: Cross-compile + atomic-write crash-safety + on-Pi run
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

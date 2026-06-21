@@ -43,11 +43,11 @@ development_status:
   1-3-worker-seam-interface-stub-1-in-flight-arbiter-gate: done
   1-4-suture-supervisor-root-soul-survives-edge-panic: done
   1-5-cli-transport-adapter-end-to-end-round-trip: done
-  1-6-cross-compile-atomic-write-crash-safety-on-pi-run: review
+  1-6-cross-compile-atomic-write-crash-safety-on-pi-run: done
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-personality-state-struct-periodic-checkpoint: backlog
+  epic-2: in-progress
+  2-1-personality-state-struct-periodic-checkpoint: done
   2-2-region-compositor-contract-terminal-ansi-face: backlog
   2-3-blink-idle-reflexes: backlog
   2-4-mood-drift-reflex: backlog
