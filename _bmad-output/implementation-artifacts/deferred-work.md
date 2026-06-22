@@ -1,5 +1,13 @@
 # Deferred Work
 
+## Deferred from: code review of 2-3-blink-idle-reflexes (2026-06-21)
+
+- **`hub.Publish` blocks if display channel full/renderer stopped** — `PushFace` has no context-aware escape; `blinkOnce` can hang if the renderer is stopped or restarting. Acknowledged 2.2 architectural constraint; blink respects ≤2 pushes/cycle. Files: `core/reflexes/blink.go`.
+- **PCG seed second word always 0** — `rand.NewPCG(uint64(time.Now().UnixNano()), 0)` reduces jitter entropy; jitter is functionally present but PCG stream-select is fixed. File: `cmd/shelldon/main.go`.
+- **Wrong-kind envelope on inbound skips `store.Touch()`** — dispatch type-asserts before calling Touch; a wrong-kind envelope would silently skip the idle reset. Theoretical: inbound only receives `KindInboundMessage`. File: `core/dispatch/dispatch.go`.
+- **`dispatch_test.go` `<-outbound` has no timeout** — test hangs indefinitely if `worker.Stub{}` fails to respond. File: `core/dispatch/dispatch_test.go:41`.
+- **Supervisor restart while idle → immediate blink** — after a panic restart the idle threshold is already elapsed; cosmetic only. File: `core/reflexes/blink.go`.
+
 ## Deferred from: code review of 2-2-region-compositor-contract-terminal-ansi-face (2026-06-21)
 
 - **Boot-time push + back-pressure** — `hub.Publish` is a blocking send; single boot push is safe with a 16-slot buffer, but any caller pushing >16 frames before `renderer.Serve` starts will deadlock. Relevant for Story 2.3 blink loop design. Files: `cmd/shelldon/main.go`, `core/compositor/compositor.go`.

@@ -1,23 +1,26 @@
 // Command shelldon is the single supervised process: it wires the bus, arbiter,
 // worker stub, personality-state checkpoint, core dispatch loop, CLI transport
-// adapter, and terminal face renderer, then runs them as supervised edges under
-// the core suture root until a shutdown signal arrives, draining edges in reverse
-// start order (AD-5).
+// adapter, terminal face renderer, and blink reflex, then runs them as supervised
+// edges under the core suture root until a shutdown signal arrives, draining edges
+// in reverse start order (AD-5).
 package main
 
 import (
 	"context"
 	"log/slog"
+	"math/rand/v2"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/elliotboney/shelldon_go/contracts"
 	"github.com/elliotboney/shelldon_go/core/arbiter"
 	"github.com/elliotboney/shelldon_go/core/bus"
 	"github.com/elliotboney/shelldon_go/core/compositor"
 	"github.com/elliotboney/shelldon_go/core/dispatch"
+	"github.com/elliotboney/shelldon_go/core/reflexes"
 	"github.com/elliotboney/shelldon_go/core/state"
 	"github.com/elliotboney/shelldon_go/core/supervisor"
 	"github.com/elliotboney/shelldon_go/display/terminal"
@@ -64,10 +67,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	disp := dispatch.New(hub, arb, inbound)
+	disp := dispatch.New(hub, arb, inbound, store)
 	adapter := cli.New(hub, outbound, os.Stdin, os.Stdout, "cli")
 	comp := compositor.New(hub)
 	renderer := terminal.New(display, os.Stdout)
+	rng := rand.New(rand.NewPCG(uint64(time.Now().UnixNano()), 0))
+	blink := reflexes.NewBlink(comp, store, rng)
 
 	root := supervisor.New("shelldon")
 	// Start order: state-checkpoint first, then dispatch, then CLI → reverse drain
@@ -77,6 +82,7 @@ func main() {
 	root.Add(supervisor.Guard("core-dispatch", disp.Serve))
 	root.Add(supervisor.Guard("cli-transport", adapter.Serve))
 	root.Add(supervisor.Guard("display-terminal", renderer.Serve))
+	root.Add(supervisor.Guard("reflex-blink", blink.Serve))
 
 	// Show an initial face on boot. The mood-driven expression is Story 2.4; the
 	// buffered display channel absorbs this push until the renderer starts.

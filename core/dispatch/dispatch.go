@@ -3,9 +3,9 @@
 // (≤1 in flight, AD-8), and publishes the worker's reply as an outbound-message
 // envelope. It is the in-core glue between the bus and the arbiter.
 //
-// It imports contracts, core/bus, core/arbiter, and worker — never a transport
-// adapter (AD-12; enforced by imports_test.go). Core sees only the transport-
-// agnostic message contract.
+// It imports contracts, core/bus, core/arbiter, core/state, and worker — never a
+// transport adapter (AD-12; enforced by imports_test.go). Core sees only the
+// transport-agnostic message contract.
 package dispatch
 
 import (
@@ -14,6 +14,7 @@ import (
 	"github.com/elliotboney/shelldon_go/contracts"
 	"github.com/elliotboney/shelldon_go/core/arbiter"
 	"github.com/elliotboney/shelldon_go/core/bus"
+	"github.com/elliotboney/shelldon_go/core/state"
 )
 
 // Dispatcher routes inbound messages to turns and emits the replies.
@@ -21,12 +22,14 @@ type Dispatcher struct {
 	hub     *bus.Hub
 	arb     *arbiter.Arbiter
 	inbound <-chan contracts.Envelope
+	store   *state.Store
 }
 
 // New returns a Dispatcher consuming inbound from the given channel and
-// publishing outbound replies through hub.
-func New(hub *bus.Hub, arb *arbiter.Arbiter, inbound <-chan contracts.Envelope) *Dispatcher {
-	return &Dispatcher{hub: hub, arb: arb, inbound: inbound}
+// publishing outbound replies through hub. store is stamped on each inbound
+// message so the idle reflex (Story 2.3) knows when the owner last interacted.
+func New(hub *bus.Hub, arb *arbiter.Arbiter, inbound <-chan contracts.Envelope, store *state.Store) *Dispatcher {
+	return &Dispatcher{hub: hub, arb: arb, inbound: inbound, store: store}
 }
 
 // Serve runs the dispatch loop until ctx is cancelled. For each inbound message
@@ -46,6 +49,7 @@ func (d *Dispatcher) Serve(ctx context.Context) error {
 			if !ok {
 				continue // defensive: wrong payload for this kind
 			}
+			d.store.Touch() // reset idleness so ambient blinking pauses (Story 2.3)
 			res, err := d.arb.Submit(ctx, contracts.Job{Input: msg.Text, ConvoID: msg.ConvoID})
 			if err != nil {
 				continue // ErrTurnInFlight / cancelled: busy-ack is Story 2.6

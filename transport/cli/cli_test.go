@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/elliotboney/shelldon_go/core/arbiter"
 	"github.com/elliotboney/shelldon_go/core/bus"
 	"github.com/elliotboney/shelldon_go/core/dispatch"
+	"github.com/elliotboney/shelldon_go/core/state"
 	"github.com/elliotboney/shelldon_go/transport/cli"
 	"github.com/elliotboney/shelldon_go/worker"
 )
@@ -32,7 +34,8 @@ func TestEndToEndRoundTrip(t *testing.T) {
 	}
 
 	arb := arbiter.New(worker.Stub{})
-	disp := dispatch.New(hub, arb, inbound)
+	store := state.New(state.Default(), filepath.Join(t.TempDir(), "state.json"))
+	disp := dispatch.New(hub, arb, inbound, store)
 
 	pr, pw := io.Pipe()
 	adapter := cli.New(hub, outbound, strings.NewReader("hello\n"), pw, "cli")

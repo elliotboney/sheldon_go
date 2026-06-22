@@ -49,7 +49,7 @@ development_status:
   epic-2: in-progress
   2-1-personality-state-struct-periodic-checkpoint: done
   2-2-region-compositor-contract-terminal-ansi-face: done
-  2-3-blink-idle-reflexes: backlog
+  2-3-blink-idle-reflexes: done
   2-4-mood-drift-reflex: backlog
   2-5-reflex-tier-scheduler: backlog
   2-6-offline-acknowledgement-brainless-alive: backlog
