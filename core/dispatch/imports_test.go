@@ -9,11 +9,12 @@ import (
 	"testing"
 )
 
-// TestCoreDoesNotImportTransport enforces AC2 / AD-12: no package under core/
-// may import a transport adapter — core sees only the transport-agnostic message
-// contract in contracts/. This makes a future accidental core→transport import
-// fail the build, not merely a convention. The test runs with its working
-// directory set to core/dispatch/, so ".." is the core/ tree.
+// TestCoreDoesNotImportTransport enforces AC2 / AD-12 / AD-6: no package under
+// core/ may import an edge adapter — a transport (core sees only the transport-
+// agnostic message contract) or a renderer (core sees only the region-compositor
+// contract). This makes a future accidental core→edge import fail the build, not
+// merely a convention. The test runs with its working directory set to
+// core/dispatch/, so ".." is the core/ tree.
 func TestCoreDoesNotImportTransport(t *testing.T) {
 	fset := token.NewFileSet()
 	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
@@ -31,6 +32,9 @@ func TestCoreDoesNotImportTransport(t *testing.T) {
 			p := strings.Trim(imp.Path.Value, `"`)
 			if strings.Contains(p, "/transport") || strings.Contains(p, "telego") {
 				t.Errorf("%s imports %q — core must not import a transport adapter (AD-12)", path, p)
+			}
+			if strings.Contains(p, "/display") {
+				t.Errorf("%s imports %q — core must not import a renderer; the region-compositor contract is the only seam (AD-6)", path, p)
 			}
 		}
 		return nil

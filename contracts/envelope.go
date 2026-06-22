@@ -24,12 +24,15 @@ const (
 	KindInboundMessage Kind = "inbound-message"
 	// KindOutboundMessage is a reply from core to a transport adapter.
 	KindOutboundMessage Kind = "outbound-message"
+	// KindFaceSnapshot is a face-region snapshot core pushes to the display edge
+	// (AD-6); its payload is a RegionSnapshot.
+	KindFaceSnapshot Kind = "face-snapshot"
 )
 
 // AllKinds is the closed set of declared kinds. The required M0 round-trip test
 // is derived from this slice, so adding a Kind without a corresponding test row
 // fails the suite (AC1: every kind, not a sample).
-var AllKinds = []Kind{KindJob, KindResult, KindInboundMessage, KindOutboundMessage}
+var AllKinds = []Kind{KindJob, KindResult, KindInboundMessage, KindOutboundMessage, KindFaceSnapshot}
 
 // Header is the closed envelope header from AD-11. No fields may be added here
 // without a contract change.

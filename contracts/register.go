@@ -14,6 +14,7 @@ func Register() {
 	gob.Register(Result{})
 	gob.Register(InboundMessage{})
 	gob.Register(OutboundMessage{})
+	gob.Register(RegionSnapshot{})
 }
 
 func init() {

@@ -44,6 +44,10 @@ func TestEnvelopeRoundTrip(t *testing.T) {
 			Header:  Header{ID: "e4", V: 1, Kind: KindOutboundMessage, Src: "core", Dst: "cli", TurnID: "t2"},
 			Payload: OutboundMessage{ConvoID: "cli", Text: "hello"},
 		},
+		KindFaceSnapshot: {
+			Header:  Header{ID: "e5", V: 1, Kind: KindFaceSnapshot, Src: "core", Dst: "display", TurnID: ""},
+			Payload: RegionSnapshot{Region: RegionFace, Seq: 7, Face: Face{Expression: ExpressionHappy, EyesOpen: true}},
+		},
 	}
 
 	for _, k := range AllKinds {

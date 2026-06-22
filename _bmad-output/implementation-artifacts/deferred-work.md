@@ -1,5 +1,12 @@
 # Deferred Work
 
+## Deferred from: code review of 2-2-region-compositor-contract-terminal-ansi-face (2026-06-21)
+
+- **Boot-time push + back-pressure** — `hub.Publish` is a blocking send; single boot push is safe with a 16-slot buffer, but any caller pushing >16 frames before `renderer.Serve` starts will deadlock. Relevant for Story 2.3 blink loop design. Files: `cmd/shelldon/main.go`, `core/compositor/compositor.go`.
+- **Write errors silenced in paint()** — `fmt.Fprint` errors discarded with `_, _`; supervisor cannot detect a dead terminal output stream. Would require changing `paint`/`handle`/`Serve` signatures to propagate. File: `display/terminal/terminal.go`.
+- **RegionID not structurally closed** — `type RegionID string` uses the same string-alias pattern as `Kind`; Go does not prevent external code from constructing arbitrary `RegionID` values. Consider unexported backing type or constructor-only pattern before Epic 6 plugin region-claims (AD-14). File: `contracts/region.go`.
+- **_test.go files excluded from core import guard** — the import test skips `*_test.go` files; a future core test file importing `display/` would pass undetected. File: `core/dispatch/imports_test.go`.
+
 ## Deferred from: code review of 1-1-versioned-contracts-gob-round-trip (2026-06-20)
 
 - **AllKinds mutability and Kind-AllKinds sync gap** — unsure which fix to take (unexported+Kinds() vs exported+comment); revisit when a second Kind is added.
