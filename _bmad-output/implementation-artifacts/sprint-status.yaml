@@ -30,7 +30,7 @@
 # - Re-run sprint-planning to refresh auto-detected statuses
 
 generated: 2026-06-20 08:33:20
-last_updated: 2026-06-21 # dev story 2.5
+last_updated: 2026-06-22 # dev story 2.6
 project: shelldon_go
 project_key: NOKEY
 tracking_system: file-system
@@ -46,13 +46,13 @@ development_status:
   1-6-cross-compile-atomic-write-crash-safety-on-pi-run: done
   epic-1-retrospective: optional
 
-  epic-2: in-progress
+  epic-2: done
   2-1-personality-state-struct-periodic-checkpoint: done
   2-2-region-compositor-contract-terminal-ansi-face: done
   2-3-blink-idle-reflexes: done
   2-4-mood-drift-reflex: done
-  2-5-reflex-tier-scheduler: review
-  2-6-offline-acknowledgement-brainless-alive: backlog
+  2-5-reflex-tier-scheduler: done
+  2-6-offline-acknowledgement-brainless-alive: done
   epic-2-retrospective: optional
 
   epic-3: backlog

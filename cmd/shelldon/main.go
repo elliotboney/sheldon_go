@@ -35,7 +35,11 @@ func main() {
 	defer stop()
 
 	hub := bus.New()
-	arb := arbiter.New(worker.Stub{})
+	// turnTimeout bounds a worker turn so an absent/slow brain degrades to a reflex
+	// acknowledgement instead of freezing the pet (AD-8/NFR13). Tunable story-time
+	// config; the M0 stub answers instantly, so this stays dormant until Epic 3.
+	const turnTimeout = 30 * time.Second
+	arb := arbiter.New(worker.Stub{}, turnTimeout)
 
 	// Personality-state: restore from the RAM checkpoint, or defaults on first
 	// boot (AD-16). The checkpoint lives beside, not inside, the Epic 4 durable

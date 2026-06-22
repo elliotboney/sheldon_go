@@ -4,7 +4,7 @@ baseline_commit: 3150a03
 
 # Story 2.5: Reflex-tier scheduler
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

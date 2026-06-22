@@ -33,7 +33,7 @@ func TestEndToEndRoundTrip(t *testing.T) {
 		t.Fatalf("register outbound: %v", err)
 	}
 
-	arb := arbiter.New(worker.Stub{})
+	arb := arbiter.New(worker.Stub{}, time.Minute)
 	store := state.New(state.Default(), filepath.Join(t.TempDir(), "state.json"))
 	disp := dispatch.New(hub, arb, inbound, store)
 

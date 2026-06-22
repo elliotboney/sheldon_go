@@ -1,5 +1,15 @@
 # Deferred Work
 
+## Deferred from: code review of 2-6-offline-acknowledgement-brainless-alive (2026-06-22)
+
+- **`hub.Publish` blocks → dispatch loop potential deadlock** — `publishReply` uses an unconditional blocking send; if the outbound consumer stops, `Serve` hangs. Pre-existing architectural constraint (16-slot buffer + draining transport is the M0 safety net). File: `core/dispatch/dispatch.go` — `publishReply`.
+- **`select` race: valid result discarded when `done` and `tctx.Done()` fire simultaneously** — Go's pseudo-random select may pick `tctx.Done()` even when the worker result is ready at the same tick; the valid result is silently discarded. M0 acknowledged limitation (AD-11 fence = context cancellation + dropped late Result). File: `core/arbiter/arbiter.go` — `Submit` select.
+- **Spurious `reflexAck` during shutdown window** — one extra ack can fire if `ctx` is cancelled after `Submit` returns a non-nil error but before the `ctx.Err() != nil` switch check. Benign narrow race; no AC violated. File: `core/dispatch/dispatch.go` — `Serve` switch.
+- **`ErrNoRoute` silently discarded in `publishReply`** — `_ = d.hub.Publish(...)` inherits the pre-existing pattern; a missing route registration drops the reply with no visibility. File: `core/dispatch/dispatch.go:77`.
+- **Non-cooperative worker goroutine leaks if it ignores `ctx.Done()`** — an abandoned goroutine runs indefinitely if the worker doesn't respect cancellation. Inherent Go limitation; Epic 3 workers must honour context. File: `core/arbiter/arbiter.go` — `Submit` goroutine.
+- **`blockingWorker` ignores context — existing concurrency test doesn't cover context-cancellation propagation** — `TestArbiter_AtMostOneInFlight` unblocks via `release` channel, not context; no test exercises ctx cancellation on the blocking worker. File: `core/arbiter/arbiter_test.go`.
+- **Timeout tests have no per-test deadline → hang instead of fail** — tests blocking on `<-outbound` or `<-done` have no `time.After` guard; a regression produces a hang. Project-level `go test -timeout` is the current safety net. Files: `core/arbiter/arbiter_test.go`, `core/dispatch/dispatch_test.go`.
+
 ## Deferred from: code review of 2-5-reflex-tier-scheduler (2026-06-22)
 
 - **`Serve` with zero registered jobs returns `nil` immediately** — `wg.Wait()` on an empty slice returns at once; `ctx.Err()` is nil if context isn't cancelled; supervisor sees a clean exit and doesn't restart. Not reachable with current main.go usage. File: `core/scheduler/scheduler.go`.

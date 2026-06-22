@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
+	"time"
 
 	"github.com/elliotboney/shelldon_go/contracts"
 )
@@ -41,12 +43,98 @@ func (w *blockingWorker) AssembleAndPropose(_ context.Context, turn contracts.Jo
 	return contracts.Result{Reply: turn.Input}, nil
 }
 
+// hangingWorker blocks until its context is cancelled, recording that it observed
+// the cancellation. It models a brain that cannot complete a turn, so the arbiter
+// timeout must abandon it.
+type hangingWorker struct {
+	sawCancel atomic.Bool
+}
+
+func (w *hangingWorker) AssembleAndPropose(ctx context.Context, _ contracts.Job) (contracts.Result, error) {
+	<-ctx.Done()
+	w.sawCancel.Store(true)
+	return contracts.Result{}, ctx.Err()
+}
+
+// TestArbiter_TimeoutClosesTurn is AC2 (AD-8/AD-11): a turn the brain cannot
+// complete is closed when the arbiter timeout elapses — Submit returns
+// ErrTurnTimeout, the worker's context is cancelled (the late-Result fence), and
+// the slot is freed so a subsequent turn is admitted (not rejected as in-flight).
+// Deterministic under the synctest fake clock (AD-10).
+func TestArbiter_TimeoutClosesTurn(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const timeout = 5 * time.Second
+		w := &hangingWorker{}
+		a := New(w, timeout)
+		job := contracts.Job{Input: "hi", ConvoID: "c1"}
+
+		submit := func() (contracts.Result, error) {
+			var res contracts.Result
+			var err error
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				res, err = a.Submit(context.Background(), job)
+			}()
+			time.Sleep(timeout + time.Second) // fake-advance past the deadline
+			synctest.Wait()
+			<-done
+			return res, err
+		}
+
+		res, err := submit()
+		if !errors.Is(err, ErrTurnTimeout) {
+			t.Fatalf("Submit returned %v, want ErrTurnTimeout", err)
+		}
+		if res.Reply != "" {
+			t.Errorf("timed-out turn returned a reply %q, want empty", res.Reply)
+		}
+		if !w.sawCancel.Load() {
+			t.Fatal("worker context was not cancelled on timeout — AD-11 fence missing")
+		}
+
+		// The slot must have reopened: a second turn is admitted (it times out
+		// again) rather than rejected with ErrTurnInFlight — no turn remains in
+		// flight past the timeout.
+		if _, err := submit(); !errors.Is(err, ErrTurnTimeout) {
+			if errors.Is(err, ErrTurnInFlight) {
+				t.Fatal("slot not freed after timeout: second Submit rejected as in-flight")
+			}
+			t.Fatalf("second Submit returned %v, want ErrTurnTimeout (admitted then timed out)", err)
+		}
+	})
+}
+
+// panicWorker panics on every turn — models a buggy/injected brain.
+type panicWorker struct{}
+
+func (panicWorker) AssembleAndPropose(_ context.Context, _ contracts.Job) (contracts.Result, error) {
+	panic("worker blew up")
+}
+
+// TestArbiter_RecoversWorkerPanic proves the per-turn goroutine recovers its own
+// panic (AD-5: recover does not cross goroutines): a panicking worker returns an
+// error rather than leaking the in-flight token, and the slot reopens so the next
+// turn is admitted — the pet never freezes.
+func TestArbiter_RecoversWorkerPanic(t *testing.T) {
+	a := New(panicWorker{}, time.Minute)
+	job := contracts.Job{Input: "hi", ConvoID: "c1"}
+
+	if _, err := a.Submit(context.Background(), job); err == nil {
+		t.Fatal("Submit returned nil error for a panicking worker, want a turn error")
+	}
+	// The token must have been released: a second turn is admitted, not rejected.
+	if _, err := a.Submit(context.Background(), job); errors.Is(err, ErrTurnInFlight) {
+		t.Fatal("token leaked after worker panic: second Submit rejected as in-flight (frozen pet)")
+	}
+}
+
 // TestArbiter_AtMostOneInFlight is the required ≤1-worker M0 test (NFR4/AD-8):
 // with one turn in flight, every concurrent submission is rejected and the two
 // turns never overlap. Run under `go test -race` for AC3.
 func TestArbiter_AtMostOneInFlight(t *testing.T) {
 	w := newBlockingWorker()
-	a := New(w)
+	a := New(w, time.Minute) // generous timeout: the blocking worker must not be killed mid-test
 	ctx := context.Background()
 	job := contracts.Job{Input: "hi", ConvoID: "c1"}
 
