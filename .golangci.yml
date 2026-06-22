@@ -14,3 +14,18 @@ linters:
               desc: "contracts must not import provider/LLM SDKs (AD-1)"
             - pkg: "github.com/sashabaranov/go-openai"
               desc: "contracts must not import provider/LLM SDKs (AD-1)"
+        # Provider/LLM SDKs may be imported ONLY under broker/internal/ — the broker
+        # is the sole trust boundary (AD-9). This is build-failing, not just idiom.
+        # Vacuously satisfied until Story 3.2 adds the first provider SDK; it then
+        # fails the build on any import outside broker/internal/.
+        provider-sdks-broker-internal-only:
+          files:
+            - "**"
+            - "!**/broker/internal/**"
+          deny:
+            - pkg: "github.com/anthropics/anthropic-sdk-go"
+              desc: "provider SDKs may live only under broker/internal/ (AD-9)"
+            - pkg: "github.com/sashabaranov/go-openai"
+              desc: "provider SDKs may live only under broker/internal/ (AD-9)"
+            - pkg: "github.com/ollama/ollama"
+              desc: "provider SDKs may live only under broker/internal/ (AD-9)"

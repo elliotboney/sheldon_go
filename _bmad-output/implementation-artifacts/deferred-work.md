@@ -1,5 +1,11 @@
 # Deferred Work
 
+## Deferred from: code review of 3-1-capability-broker-credential-boundary (2026-06-22)
+
+- **`WalkDir("..")` is cwd-dependent in imports_test** — `broker/imports_test.go:31` — walk root is the package dir's parent, which is correct for `go test` but undocumented; scanned-count guard (≥10) mitigates complete miss. Pre-existing project pattern (dispatch/scheduler same). Accept for now; revisit if tests ever run outside standard `go test`.
+- **Reflection test false-positives on future embedded exported types** — `broker/broker_test.go:68` — `TestBroker_ExposesNoRawKeyAccessor` iterates all exported fields; an embedded `sync.Mutex` or similar would trigger a false fail. Not a current bug; fix when/if `Broker` gains an embedded type.
+- **`contracts-pure` depguard rule missing `ollama`** — `.golangci.yml` — `ollama` is denied by `provider-sdks-broker-internal-only` but not by the older `contracts-pure` rule. Pre-existing from Story 1.1. Low risk (contracts package is simple); add `ollama` to `contracts-pure` when convenient.
+
 ## Deferred from: code review of 2-6-offline-acknowledgement-brainless-alive (2026-06-22)
 
 - **`hub.Publish` blocks → dispatch loop potential deadlock** — `publishReply` uses an unconditional blocking send; if the outbound consumer stops, `Serve` hangs. Pre-existing architectural constraint (16-slot buffer + draining transport is the M0 safety net). File: `core/dispatch/dispatch.go` — `publishReply`.
