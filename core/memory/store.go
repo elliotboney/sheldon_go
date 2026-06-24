@@ -72,8 +72,9 @@ func Open(path string) (*Store, error) {
 func (s *Store) Close() error { return s.db.Close() }
 
 // migrate creates the messages table, its recency index, the external-content
-// FTS5 index, and the triggers that keep the index in sync. All statements are
-// idempotent (IF NOT EXISTS), so Open is safe to call against an existing db.
+// FTS5 index, the triggers that keep the index in sync, and the learnings table
+// with its dedup index. All statements are idempotent (IF NOT EXISTS), so Open is
+// safe to call against an existing db.
 func (s *Store) migrate(ctx context.Context) error {
 	const schema = `
 CREATE TABLE IF NOT EXISTS messages (
@@ -95,6 +96,16 @@ CREATE TRIGGER IF NOT EXISTS messages_au AFTER UPDATE ON messages BEGIN
 	INSERT INTO messages_fts(messages_fts, rowid, content) VALUES ('delete', old.id, old.content);
 	INSERT INTO messages_fts(rowid, content) VALUES (new.id, new.content);
 END;
+CREATE TABLE IF NOT EXISTS learnings (
+	id               INTEGER PRIMARY KEY AUTOINCREMENT,
+	pattern_key      TEXT,
+	observation      TEXT    NOT NULL,
+	recurrence_count INTEGER NOT NULL DEFAULT 1,
+	status           TEXT    NOT NULL DEFAULT 'pending',
+	created_at       INTEGER NOT NULL,
+	updated_at       INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_learnings_pattern_key ON learnings(pattern_key);
 `
 	if _, err := s.db.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("memory: migrate: %w", err)
@@ -122,6 +133,9 @@ func (s *Store) Append(ctx context.Context, convoID, role, content string) (int6
 // Recent returns up to n messages for convoID, most-recent-first. An empty
 // conversation yields an empty slice, not an error.
 func (s *Store) Recent(ctx context.Context, convoID string, n int) ([]Message, error) {
+	if n <= 0 {
+		return []Message{}, nil // SQLite reads LIMIT < 0 as "no limit"; a non-positive cap returns nothing
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT id, convo_id, role, content, created_at
 		   FROM messages
@@ -140,6 +154,9 @@ func (s *Store) Recent(ctx context.Context, convoID string, n int) ([]Message, e
 // phrase (escaped + quoted) so arbitrary input — punctuation, FTS5 operators —
 // can't throw a syntax error or act as a query DSL.
 func (s *Store) Search(ctx context.Context, convoID, query string, n int) ([]Message, error) {
+	if n <= 0 {
+		return []Message{}, nil // SQLite reads LIMIT < 0 as "no limit"; a non-positive cap returns nothing
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT m.id, m.convo_id, m.role, m.content, m.created_at
 		   FROM messages_fts f

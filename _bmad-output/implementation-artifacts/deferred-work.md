@@ -4,6 +4,14 @@
 
 - **`convo_id` not in FTS table — full FTS scan on `Search`** — `Search` does a full FTS scan across all conversations then filters by `convo_id`; correct behavior but O(all messages) at scale. Acceptable at M1 single-user volume; revisit if conversation volume grows significantly or multi-user lands. **(Deferred — genuinely fine at M1.)**
 
+## Deferred from: code review of 4-2-learnings-table-hot-path-capture-learning.md (2026-06-24)
+
+- **`ConcurrentNoLostIncrements` tests Go pool serialization, not bare upsert atomicity** — the 50-goroutine test proves no lost increments via `SetMaxOpenConns(1)` + atomic upsert combined. If `MaxOpenConns` is ever relaxed (e.g. to allow read concurrency), a dedicated test of the upsert atomicity alone would be needed. **(Deferred — design isn't changing; the combined guarantee holds.)**
+
+### Resolved in post-review fixes (2026-06-24)
+
+- ✅ **Non-positive `n` mapped to SQLite "no limit"** — `Recent`, `Search`, and `Learnings` now guard `if n <= 0 { return empty }`, so a non-positive cap returns nothing instead of the whole table. Fixed across all three core/memory list queries (the reviewer noted `Recent` shared the gap; the dream cycle in 4.4 will pass a computed `n` to `Learnings`). Test: `TestListQueries_NonPositiveLimitReturnsEmpty`.
+
 ### Resolved in post-review fixes (2026-06-24)
 
 - ✅ **`Open("")` silent in-memory db** — `Open` now rejects an empty path with `memory: empty db path` (no silent data loss). Test: `TestOpen_RejectsEmptyPath`.
