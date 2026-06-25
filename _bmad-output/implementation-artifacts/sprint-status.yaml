@@ -30,7 +30,7 @@
 # - Re-run sprint-planning to refresh auto-detected statuses
 
 generated: 2026-06-20 08:33:20
-last_updated: 2026-06-25 # story 5-2 → ready-for-dev (vault isolation property test)
+last_updated: 2026-06-25 # story 5-2 → done (review patch applied; Pi OS-enforcement proof PASS)
 
 action_items:
   - epic: 2
@@ -124,7 +124,7 @@ development_status:
 
   epic-5: in-progress
   5-1-privsep-lite-worker-subprocess-gob-transport-swap: done
-  5-2-vault-isolation-property-test: ready-for-dev
+  5-2-vault-isolation-property-test: done
   5-3-sensitive-classification-lane-on: backlog
   epic-5-retrospective: optional
 

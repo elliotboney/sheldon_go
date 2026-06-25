@@ -192,3 +192,10 @@
 
 - **`Close()` discards cmd.Wait() exit status** — project pattern is `_ = cmd.Wait()` in teardownLocked; logging would add AD-17 observability for abnormal child exit. File: `worker/privsep/privsep.go`.
 - **No panic recovery in `runChild`** — child panic crashes the subprocess; surfaces parent-side as EOF error → arbiter reflex degrade. AD-8 contract upheld; "dead-child policy" decision documented in story 5.1 spec. Adding `recover()` in the child loop would be more graceful. File: `worker/privsep/child.go`.
+
+## Deferred from: code review of 5-2-vault-isolation-property-test (2026-06-25)
+
+- **TOCTOU between `MkdirAll` and `Chmod` in `EnsureVault`** — window between dir creation and mode pin; called once at startup before worker runs; negligible real risk but not airtight. File: `core/memory/vault.go:32-38`.
+- **Ambient `SHELLDON_VAULT_PROBE` can intercept `TestMain`** — if env is set to a path permission-denied to the test user, all tests exit 0 silently. Extremely unlikely given the specific name; low-priority hardening. File: `core/memory/vault_isolation_linux_test.go:43`.
+- **`SHELLDON_WORKER_UID=0` skips vault silently** — intentional (spec: "uid==0 → no vault") but could use a `slog.Warn` to flag that isolation is disabled. Park for Epic 6 ops hardening. File: `cmd/shelldon/main.go:133`.
+- **`EnsureVault` does not verify vault dir ownership after `Chmod`** — pre-existing vault with wrong uid would get mode-pinned without an ownership check. Extremely unlikely scenario; hardening only. File: `core/memory/vault.go:38`.

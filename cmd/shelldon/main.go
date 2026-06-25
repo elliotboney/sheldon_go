@@ -113,8 +113,9 @@ func main() {
 	// context seam. SHELLDON_WORKER=privsep selects the M3 Privsep-lite subprocess
 	// worker behind the SAME seam: the arbiter, dispatch, and scheduler are unchanged
 	// (AD-4 — the transport swap reshapes no caller). SHELLDON_WORKER_UID drops the
-	// child to that uid (Linux + root only; Story 5.2 adds the matching vault
-	// exclusion). Whichever worker is selected, the arbiter bounds the turn.
+	// child to that uid (Linux + root only); when set, core creates the vault/ with
+	// worker-uid-excluding 0700 perms (Story 5.2, AD-3/NFR6). Whichever worker is
+	// selected, the arbiter bounds the turn.
 	var w worker.Worker
 	switch os.Getenv("SHELLDON_WORKER") {
 	case "privsep":
@@ -125,6 +126,17 @@ func main() {
 			} else {
 				slog.Warn("invalid SHELLDON_WORKER_UID; running child same-uid", "value", v, "err", perr)
 			}
+		}
+		// Vault isolation (AD-3): the vault only exists once the worker is genuinely
+		// uid-separated. With a worker uid configured, create vault/ owned by core with
+		// 0700 perms so the kernel excludes the worker uid (NFR6). Unset uid → no vault.
+		if uid != 0 {
+			vaultPath, verr := curated.EnsureVault()
+			if verr != nil {
+				slog.Error("create vault", "err", verr)
+				os.Exit(1)
+			}
+			slog.Info("vault: created uid-isolated (M3)", "path", vaultPath, "worker_uid", uid)
 		}
 		pw := privsep.New(privsep.WithUID(uid, uid))
 		defer func() { _ = pw.Close() }()
