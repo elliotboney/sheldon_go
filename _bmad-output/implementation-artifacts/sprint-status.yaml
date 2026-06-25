@@ -30,7 +30,7 @@
 # - Re-run sprint-planning to refresh auto-detected statuses
 
 generated: 2026-06-20 08:33:20
-last_updated: 2026-06-25 # story 5-2 → done (review patch applied; Pi OS-enforcement proof PASS)
+last_updated: 2026-06-25 # epic-4 data-integrity bugs cleared (pre-5.3): UPSERT status preserve + dream promote compensating revert
 
 action_items:
   - epic: 2
@@ -68,7 +68,7 @@ action_items:
   - epic: 4
     action: "Close 4.5 data-integrity bugs before Story 5.3: make PromoteLearning+AppendFact atomic (or compensating); stop ApplyLearning UPSERT resetting a promoted/pruned status back to pending"
     owner: "Elliot"
-    status: open
+    status: done  # 2026-06-25: ApplyLearning UPSERT no longer resets status (preserves promoted/pruned); dream promote compensates with RevertLearningToPending on append failure. +3 tests."
   - epic: 4
     action: "Decide AI-4 durable/in-memory budget: action standalone or explicitly park against Epic 6 (PiSugar power/budget gate) — stop folding it forward"
     owner: "Elliot"

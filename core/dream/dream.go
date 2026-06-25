@@ -115,8 +115,17 @@ func applyResult(ctx context.Context, store *memory.Store, curated *memory.Curat
 			// Sensitive lane OFF: the promoted observation always goes to the curated
 			// facts tree, never vault/ (Epic 5, NFR6/AD-3). curated.AppendFact rejects
 			// vault/ regardless, so this is doubly safe.
+			//
+			// DB promotion and the curated fact must agree (a learning is "promoted"
+			// iff its fact is durable in the tree). If the append fails, compensate by
+			// reverting the row to pending so the next dream retries cleanly — the
+			// markdown was not written, so the retry appends no duplicate. This avoids a
+			// promoted row with no backing fact (Epic-4 data-integrity).
 			if e := curated.AppendFact(memory.FactsLearningsPath, op.Observation); e != nil {
-				slog.Warn("dream: append promoted fact failed", "pattern_key", op.PatternKey, "err", e)
+				slog.Warn("dream: append promoted fact failed; reverting promotion to pending", "pattern_key", op.PatternKey, "err", e)
+				if re := store.RevertLearningToPending(ctx, op.PatternKey); re != nil {
+					slog.Error("dream: revert promotion failed; learning is promoted in db but its fact was not written", "pattern_key", op.PatternKey, "err", re)
+				}
 			}
 		case contracts.MemoryOpPruneLearning:
 			if e := store.PruneLearning(ctx, op.PatternKey); e != nil {

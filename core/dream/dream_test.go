@@ -271,3 +271,52 @@ func TestApplyResult_HallucinatedKeyWritesNoFact(t *testing.T) {
 		t.Errorf("a hallucinated promote wrote curated markdown %q, want nothing", facts)
 	}
 }
+
+// TestApplyResult_AppendFailRevertsPromotion proves the Epic-4 data-integrity fix:
+// when the curated-markdown append fails after the DB row was marked promoted, the
+// promotion is compensated back to pending — never left "promoted" with no backing
+// fact (so the next dream retries and writes no duplicate).
+func TestApplyResult_AppendFailRevertsPromotion(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("cannot force a write-permission failure as root; skipping")
+	}
+	ctx := context.Background()
+	store, curated, root := newStores(t)
+
+	if err := store.ApplyLearning(ctx, "durable obs", "pk"); err != nil {
+		t.Fatalf("seed learning: %v", err)
+	}
+	if err := store.PromoteLearning(ctx, "pk"); err == nil {
+		// Reset to pending so applyResult performs the promote itself (mirrors the
+		// real flow where the dream proposes the promote on a pending candidate).
+		if err := store.RevertLearningToPending(ctx, "pk"); err != nil {
+			t.Fatalf("reset to pending: %v", err)
+		}
+	}
+
+	// Force AppendFact to fail: make the facts dir unwritable so WriteAtomic cannot
+	// create its temp file. The vault-style 0500 keeps read/traverse (for the
+	// post-assertion read) but denies the write.
+	factsDir := filepath.Join(root, "facts")
+	if err := os.Chmod(factsDir, 0o500); err != nil {
+		t.Fatalf("chmod facts read-only: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(factsDir, 0o755) }) // let t.TempDir cleanup remove it
+
+	applyResult(ctx, store, curated, contracts.Result{MemoryOps: []contracts.MemoryOp{
+		{Kind: contracts.MemoryOpPromoteLearning, PatternKey: "pk", Observation: "durable obs"},
+	}}, nil)
+
+	// The append failed → the promotion must have been reverted to pending.
+	got, ok, err := store.LearningByPatternKey(ctx, "pk")
+	if err != nil || !ok {
+		t.Fatalf("lookup pk: ok=%v err=%v", ok, err)
+	}
+	if got.Status != memory.LearningStatusPending {
+		t.Errorf("status = %q after failed append, want pending (promotion must be reverted)", got.Status)
+	}
+	// And no fact was written.
+	if facts, _ := curated.ReadLearnings(); facts != "" {
+		t.Errorf("a fact was written despite the append failing: %q", facts)
+	}
+}

@@ -296,3 +296,74 @@ func TestListQueries_NonPositiveLimitReturnsEmpty(t *testing.T) {
 		}
 	}
 }
+
+// TestApplyLearning_PreservesDreamStatus proves the Epic-4 data-integrity fix: a
+// learning the dream cycle already promoted or pruned keeps that status when the
+// same pattern is re-observed on the hot path — it is NOT reset to pending (which
+// would re-queue a promoted fact for duplicate promotion, or revive pruned noise).
+// The recurrence count and observation still update.
+func TestApplyLearning_PreservesDreamStatus(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name      string
+		setStatus func(*memory.Store, string) error
+		want      string
+	}{
+		{"promoted", func(s *memory.Store, pk string) error { return s.PromoteLearning(ctx, pk) }, memory.LearningStatusPromoted},
+		{"pruned", func(s *memory.Store, pk string) error { return s.PruneLearning(ctx, pk) }, memory.LearningStatusPruned},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := openTestStore(t)
+			if err := s.ApplyLearning(ctx, "obs A", "pk"); err != nil {
+				t.Fatalf("first apply: %v", err)
+			}
+			if err := tc.setStatus(s, "pk"); err != nil {
+				t.Fatalf("set %s: %v", tc.name, err)
+			}
+			// Re-observe the same pattern on the hot path.
+			if err := s.ApplyLearning(ctx, "obs B", "pk"); err != nil {
+				t.Fatalf("re-apply: %v", err)
+			}
+			got, ok, err := s.LearningByPatternKey(ctx, "pk")
+			if err != nil || !ok {
+				t.Fatalf("lookup: ok=%v err=%v", ok, err)
+			}
+			if got.Status != tc.want {
+				t.Errorf("status = %q after re-apply, want %q (dream decision must survive)", got.Status, tc.want)
+			}
+			if got.RecurrenceCount != 2 {
+				t.Errorf("recurrence_count = %d, want 2", got.RecurrenceCount)
+			}
+			if got.Observation != "obs B" {
+				t.Errorf("observation = %q, want latest %q", got.Observation, "obs B")
+			}
+		})
+	}
+}
+
+// TestRevertLearningToPending proves the compensating revert: a promoted learning
+// reverts to pending (so the dream can retry), and a missing key yields
+// ErrLearningNotFound.
+func TestRevertLearningToPending(t *testing.T) {
+	ctx := context.Background()
+	s := openTestStore(t)
+	if err := s.ApplyLearning(ctx, "obs", "pk"); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if err := s.PromoteLearning(ctx, "pk"); err != nil {
+		t.Fatalf("promote: %v", err)
+	}
+	if err := s.RevertLearningToPending(ctx, "pk"); err != nil {
+		t.Fatalf("revert: %v", err)
+	}
+	got, _, err := s.LearningByPatternKey(ctx, "pk")
+	if err != nil {
+		t.Fatalf("lookup: %v", err)
+	}
+	if got.Status != memory.LearningStatusPending {
+		t.Errorf("status = %q after revert, want pending", got.Status)
+	}
+	if err := s.RevertLearningToPending(ctx, "ghost"); !errors.Is(err, memory.ErrLearningNotFound) {
+		t.Errorf("revert(ghost) = %v, want ErrLearningNotFound", err)
+	}
+}

@@ -44,6 +44,11 @@ const LearningStatusPruned = "pruned"
 // with the latest text via one atomic UPSERT, so concurrent applies can't lose an
 // increment. An empty patternKey maps to SQL NULL — which never conflicts under the
 // UNIQUE index — so every unkeyed apply inserts a fresh row.
+//
+// The conflict update deliberately leaves status untouched: a learning the dream
+// cycle already promoted or pruned keeps that decision when re-observed on the hot
+// path. Resetting it to pending would re-queue a promoted fact for duplicate
+// promotion (or revive pruned noise) — the Epic-4 data-integrity bug this avoids.
 func (s *Store) ApplyLearning(ctx context.Context, observation, patternKey string) error {
 	key := sql.NullString{String: patternKey, Valid: patternKey != ""}
 	now := time.Now().UnixNano()
@@ -53,7 +58,6 @@ func (s *Store) ApplyLearning(ctx context.Context, observation, patternKey strin
 		 ON CONFLICT(pattern_key) DO UPDATE SET
 		      recurrence_count = recurrence_count + 1,
 		      observation      = excluded.observation,
-		      status           = 'pending',
 		      updated_at       = excluded.updated_at`,
 		key, observation, now, now)
 	if err != nil {
@@ -122,6 +126,15 @@ func (s *Store) PromoteLearning(ctx context.Context, patternKey string) error {
 // returning ErrLearningNotFound if no row matches.
 func (s *Store) PruneLearning(ctx context.Context, patternKey string) error {
 	return s.setLearningStatus(ctx, patternKey, LearningStatusPruned)
+}
+
+// RevertLearningToPending sets a learning's status back to "pending", returning
+// ErrLearningNotFound if no row matches. It is the compensating action for a
+// half-applied promotion: if the curated-markdown fact write fails after the DB
+// row was marked promoted, the dream reverts the row so the next cycle retries —
+// never leaving a "promoted" row with no backing fact (Epic-4 data-integrity).
+func (s *Store) RevertLearningToPending(ctx context.Context, patternKey string) error {
+	return s.setLearningStatus(ctx, patternKey, LearningStatusPending)
 }
 
 // setLearningStatus updates a learning's status (+ updated_at) by pattern_key. It
